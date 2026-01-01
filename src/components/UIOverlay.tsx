@@ -3,6 +3,7 @@ import React from 'react';
 interface UIOverlayProps {
   isIntroComplete: boolean;
   hoveredWorld: 'taxi' | 'food' | null;
+  isWarpAnimating?: boolean;
 }
 
 const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) => {
