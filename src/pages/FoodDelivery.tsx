@@ -36,11 +36,11 @@ const restaurants: Restaurant[] = [
     deliveryTime: '30-45 min',
     image: '🌹',
     menu: [
-      { id: 'kr1', name: 'Čobanac', description: 'Tradicionalni slavonski paprikaš s tri vrste mesa', price: 75, category: 'main' },
-      { id: 'kr2', name: 'Kulen narezak', description: 'Domaći kulen s kiselim krastavcima', price: 55, category: 'starter' },
-      { id: 'kr3', name: 'Fiš paprikaš', description: 'Riblji paprikaš s domaćim rezancima', price: 85, category: 'main' },
-      { id: 'kr4', name: 'Štrukle', description: 'Domaće štrukle sa sirom', price: 35, category: 'dessert' },
-      { id: 'kr5', name: 'Sarma', description: 'Kiseli kupus punjen mljevenim mesom', price: 65, category: 'main' },
+      { id: 'kr1', name: 'Čobanac', description: 'Tradicionalni slavonski paprikaš s tri vrste mesa', price: 9.50, category: 'main' },
+      { id: 'kr2', name: 'Kulen narezak', description: 'Domaći kulen s kiselim krastavcima', price: 7.00, category: 'starter' },
+      { id: 'kr3', name: 'Fiš paprikaš', description: 'Riblji paprikaš s domaćim rezancima', price: 11.00, category: 'main' },
+      { id: 'kr4', name: 'Štrukle', description: 'Domaće štrukle sa sirom', price: 4.50, category: 'dessert' },
+      { id: 'kr5', name: 'Sarma', description: 'Kiseli kupus punjen mljevenim mesom', price: 8.50, category: 'main' },
     ],
   },
   {
@@ -51,11 +51,11 @@ const restaurants: Restaurant[] = [
     deliveryTime: '35-50 min',
     image: '🍖',
     menu: [
-      { id: 'ru1', name: 'Ćevapi 10kom', description: 'S lukom i kajmakom', price: 55, category: 'main' },
-      { id: 'ru2', name: 'Pljeskavica', description: 'XXL pljeskavica punjenja sira', price: 65, category: 'main' },
-      { id: 'ru3', name: 'Ražnjići', description: 'Svinjski ražnjići s prilogom', price: 70, category: 'main' },
-      { id: 'ru4', name: 'Uštipci', description: 'Topli uštipci sa sirom', price: 30, category: 'starter' },
-      { id: 'ru5', name: 'Palačinke', description: 'S nutellom i bananom', price: 28, category: 'dessert' },
+      { id: 'ru1', name: 'Ćevapi 10kom', description: 'S lukom i kajmakom', price: 7.00, category: 'main' },
+      { id: 'ru2', name: 'Pljeskavica', description: 'XXL pljeskavica punjenja sira', price: 8.50, category: 'main' },
+      { id: 'ru3', name: 'Ražnjići', description: 'Svinjski ražnjići s prilogom', price: 9.00, category: 'main' },
+      { id: 'ru4', name: 'Uštipci', description: 'Topli uštipci sa sirom', price: 4.00, category: 'starter' },
+      { id: 'ru5', name: 'Palačinke', description: 'S nutellom i bananom', price: 3.50, category: 'dessert' },
     ],
   },
   {
@@ -66,12 +66,12 @@ const restaurants: Restaurant[] = [
     deliveryTime: '20-30 min',
     image: '🍔',
     menu: [
-      { id: 'mc1', name: 'Big Mac', description: 'Klasični Big Mac burger', price: 45, category: 'main' },
-      { id: 'mc2', name: 'McChicken', description: 'Hrskava piletina s majonezom', price: 38, category: 'main' },
-      { id: 'mc3', name: 'Chicken McNuggets 9kom', description: 'Hrskavi komadići piletine', price: 42, category: 'main' },
-      { id: 'mc4', name: 'Pommes Frites', description: 'Veliki pomfrit', price: 18, category: 'side' },
-      { id: 'mc5', name: 'McFlurry', description: 'Sladoled s Oreo keksima', price: 22, category: 'dessert' },
-      { id: 'mc6', name: 'Happy Meal', description: 'Dječji meni s igračkom', price: 35, category: 'main' },
+      { id: 'mc1', name: 'Big Mac', description: 'Klasični Big Mac burger', price: 5.90, category: 'main' },
+      { id: 'mc2', name: 'McChicken', description: 'Hrskava piletina s majonezom', price: 4.90, category: 'main' },
+      { id: 'mc3', name: 'Chicken McNuggets 9kom', description: 'Hrskavi komadići piletine', price: 5.50, category: 'main' },
+      { id: 'mc4', name: 'Pommes Frites', description: 'Veliki pomfrit', price: 2.30, category: 'side' },
+      { id: 'mc5', name: 'McFlurry', description: 'Sladoled s Oreo keksima', price: 2.90, category: 'dessert' },
+      { id: 'mc6', name: 'Happy Meal', description: 'Dječji meni s igračkom', price: 4.50, category: 'main' },
     ],
   },
   {
@@ -82,11 +82,11 @@ const restaurants: Restaurant[] = [
     deliveryTime: '25-40 min',
     image: '🍕',
     menu: [
-      { id: 'pr1', name: 'Margherita', description: 'Rajčica, mozzarella, bosiljak', price: 45, category: 'main' },
-      { id: 'pr2', name: 'Capricciosa', description: 'Šunka, šampinjoni, masline, artičoke', price: 55, category: 'main' },
-      { id: 'pr3', name: 'Quattro Formaggi', description: 'Četiri vrste sira', price: 58, category: 'main' },
-      { id: 'pr4', name: 'Calzone', description: 'Preklopljena pizza sa šunkom i sirom', price: 52, category: 'main' },
-      { id: 'pr5', name: 'Tiramisu', description: 'Domaći talijanski desert', price: 32, category: 'dessert' },
+      { id: 'pr1', name: 'Margherita', description: 'Rajčica, mozzarella, bosiljak', price: 5.90, category: 'main' },
+      { id: 'pr2', name: 'Capricciosa', description: 'Šunka, šampinjoni, masline, artičoke', price: 7.20, category: 'main' },
+      { id: 'pr3', name: 'Quattro Formaggi', description: 'Četiri vrste sira', price: 7.50, category: 'main' },
+      { id: 'pr4', name: 'Calzone', description: 'Preklopljena pizza sa šunkom i sirom', price: 6.90, category: 'main' },
+      { id: 'pr5', name: 'Tiramisu', description: 'Domaći talijanski desert', price: 4.20, category: 'dessert' },
     ],
   },
   {
@@ -97,11 +97,11 @@ const restaurants: Restaurant[] = [
     deliveryTime: '35-45 min',
     image: '🍣',
     menu: [
-      { id: 'sb1', name: 'Salmon Nigiri 6kom', description: 'Svježi losos na riži', price: 65, category: 'main' },
-      { id: 'sb2', name: 'California Roll 8kom', description: 'Krastavac, avokado, surimi', price: 55, category: 'main' },
-      { id: 'sb3', name: 'Spicy Tuna Roll', description: 'Ljuti tuna roll', price: 62, category: 'main' },
-      { id: 'sb4', name: 'Miso Juha', description: 'Tradicionalna japanska juha', price: 22, category: 'starter' },
-      { id: 'sb5', name: 'Edamame', description: 'Kuhani sojini mahune', price: 18, category: 'starter' },
+      { id: 'sb1', name: 'Salmon Nigiri 6kom', description: 'Svježi losos na riži', price: 8.50, category: 'main' },
+      { id: 'sb2', name: 'California Roll 8kom', description: 'Krastavac, avokado, surimi', price: 7.20, category: 'main' },
+      { id: 'sb3', name: 'Spicy Tuna Roll', description: 'Ljuti tuna roll', price: 8.10, category: 'main' },
+      { id: 'sb4', name: 'Miso Juha', description: 'Tradicionalna japanska juha', price: 2.90, category: 'starter' },
+      { id: 'sb5', name: 'Edamame', description: 'Kuhani sojini mahune', price: 2.30, category: 'starter' },
     ],
   },
 ];
@@ -140,7 +140,7 @@ const FoodDelivery = () => {
   };
 
   const totalPrice = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
-  const deliveryFee = 15;
+  const deliveryFee = 2.00;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,12 +163,12 @@ const FoodDelivery = () => {
             <div className="space-y-2 text-sm text-left bg-muted/50 p-4 rounded-lg mb-6">
               <p><strong>Restoran:</strong> {selectedRestaurant?.name}</p>
               <p><strong>Adresa:</strong> {address}</p>
-              <p><strong>Ukupno:</strong> {totalPrice + deliveryFee} kn</p>
+              <p><strong>Ukupno:</strong> {(totalPrice + deliveryFee).toFixed(2)} €</p>
               <div className="pt-2 border-t border-border mt-2">
                 <p className="font-medium mb-1">Narudžba:</p>
                 {cart.map((c) => (
                   <p key={c.item.id} className="text-muted-foreground">
-                    {c.quantity}x {c.item.name} - {c.item.price * c.quantity} kn
+                    {c.quantity}x {c.item.name} - {(c.item.price * c.quantity).toFixed(2)} €
                   </p>
                 ))}
               </div>
@@ -211,7 +211,7 @@ const FoodDelivery = () => {
           {cart.length > 0 && (
             <Badge className="bg-accent text-accent-foreground">
               <ShoppingCart className="w-4 h-4 mr-1" />
-              {cart.reduce((sum, c) => sum + c.quantity, 0)} | {totalPrice} kn
+              {cart.reduce((sum, c) => sum + c.quantity, 0)} | {totalPrice.toFixed(2)} €
             </Badge>
           )}
         </div>
@@ -284,7 +284,7 @@ const FoodDelivery = () => {
                                 <div className="flex-1">
                                   <h4 className="font-medium text-foreground">{item.name}</h4>
                                   <p className="text-sm text-muted-foreground">{item.description}</p>
-                                  <p className="text-accent font-bold mt-1">{item.price} kn</p>
+                                  <p className="text-accent font-bold mt-1">{item.price.toFixed(2)} €</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {cartItem ? (
@@ -347,23 +347,23 @@ const FoodDelivery = () => {
                     <form onSubmit={handleSubmit} className="space-y-4">
                       {/* Cart Items */}
                       <div className="space-y-2 pb-4 border-b border-border">
-                        {cart.map((c) => (
+                          {cart.map((c) => (
                           <div key={c.item.id} className="flex justify-between text-sm">
                             <span className="text-foreground">
                               {c.quantity}x {c.item.name}
                             </span>
                             <span className="text-muted-foreground">
-                              {c.item.price * c.quantity} kn
+                              {(c.item.price * c.quantity).toFixed(2)} €
                             </span>
                           </div>
                         ))}
                         <div className="flex justify-between text-sm pt-2">
                           <span className="text-muted-foreground">Dostava</span>
-                          <span className="text-muted-foreground">{deliveryFee} kn</span>
+                          <span className="text-muted-foreground">{deliveryFee.toFixed(2)} €</span>
                         </div>
                         <div className="flex justify-between font-bold pt-2">
                           <span className="text-foreground">Ukupno</span>
-                          <span className="text-accent">{totalPrice + deliveryFee} kn</span>
+                          <span className="text-accent">{(totalPrice + deliveryFee).toFixed(2)} €</span>
                         </div>
                       </div>
 
@@ -418,7 +418,7 @@ const FoodDelivery = () => {
                         className="w-full bg-accent hover:bg-accent/90 text-accent-foreground py-5 font-semibold"
                         disabled={cart.length === 0}
                       >
-                        Naruči ({totalPrice + deliveryFee} kn)
+                        Naruči ({(totalPrice + deliveryFee).toFixed(2)} €)
                       </Button>
                     </form>
                   )}
