@@ -4,10 +4,15 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import gsap from 'gsap';
 import osijekSkybox from '@/assets/osijek-skybox.jpg';
 import { useTimeOfDay } from '@/hooks/useTimeOfDay';
 import { useSoundEffects } from '@/hooks/useSoundEffects';
+
+// GLTF model paths
+const TAXI_MODEL_PATH = '/models/sedan.glb';
 
 interface CinematicSceneProps {
   onWorldSelect: (world: 'taxi' | 'food' | null) => void;
@@ -37,6 +42,8 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
   const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
   const timeRef = useRef(0);
+  const gltfLoaderRef = useRef<GLTFLoader | null>(null);
+  const taxiModelLoadedRef = useRef(false);
   
   const [sceneState, setSceneState] = useState<SceneState>('intro');
   const [isWarpAnimating, setIsWarpAnimating] = useState(false);
@@ -69,7 +76,90 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     },
   };
 
-  // Create realistic Osječki Taxi with proper livery
+  // Add Osječki Taxi branding to GLTF model
+  const addTaxiBranding = useCallback((group: THREE.Group) => {
+    // Blue diagonal stripes
+    const blueStripeMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x1a4a8a,
+      metalness: 0.3,
+      roughness: 0.4,
+    });
+
+    // Left side blue stripe
+    const leftStripeGeometry = new THREE.PlaneGeometry(2.5, 0.5);
+    const leftStripe = new THREE.Mesh(leftStripeGeometry, blueStripeMaterial);
+    leftStripe.position.set(-1.01, 0.6, 0.3);
+    leftStripe.rotation.y = -Math.PI / 2;
+    leftStripe.rotation.z = -0.3;
+    group.add(leftStripe);
+
+    // Right side blue stripe
+    const rightStripe = new THREE.Mesh(leftStripeGeometry, blueStripeMaterial);
+    rightStripe.position.set(1.01, 0.6, 0.3);
+    rightStripe.rotation.y = Math.PI / 2;
+    rightStripe.rotation.z = 0.3;
+    group.add(rightStripe);
+
+    // Gold stripes
+    const goldStripeMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xd4a43a,
+      metalness: 0.6,
+      roughness: 0.3,
+      emissive: 0xd4a43a,
+      emissiveIntensity: 0.1,
+    });
+
+    const goldStripeGeometry = new THREE.PlaneGeometry(1.8, 0.15);
+    const leftGold = new THREE.Mesh(goldStripeGeometry, goldStripeMaterial);
+    leftGold.position.set(-1.02, 0.45, 0.8);
+    leftGold.rotation.y = -Math.PI / 2;
+    leftGold.rotation.z = -0.3;
+    group.add(leftGold);
+
+    const rightGold = new THREE.Mesh(goldStripeGeometry, goldStripeMaterial);
+    rightGold.position.set(1.02, 0.45, 0.8);
+    rightGold.rotation.y = Math.PI / 2;
+    rightGold.rotation.z = 0.3;
+    group.add(rightGold);
+
+    // Phone number panel (031 200 200)
+    const textPanelMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x1a4a8a,
+      emissive: 0x1a4a8a,
+      emissiveIntensity: 0.3,
+    });
+    const textPanel = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.8, 0.25),
+      textPanelMaterial
+    );
+    textPanel.position.set(-1.02, 0.7, -0.5);
+    textPanel.rotation.y = -Math.PI / 2;
+    group.add(textPanel);
+
+    const textPanelRight = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.8, 0.25),
+      textPanelMaterial
+    );
+    textPanelRight.position.set(1.02, 0.7, -0.5);
+    textPanelRight.rotation.y = Math.PI / 2;
+    group.add(textPanelRight);
+
+    // Ground reflection glow
+    const groundGlow = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, 5.5),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffee,
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.DoubleSide,
+      })
+    );
+    groundGlow.rotation.x = -Math.PI / 2;
+    groundGlow.position.y = 0.02;
+    group.add(groundGlow);
+  }, []);
+
+  // Create realistic Osječki Taxi with proper livery (procedural fallback)
   const createTaxiModel = useCallback(() => {
     const group = new THREE.Group();
     
@@ -1176,13 +1266,83 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     const rightBuildings = createBuildings('right', isDay);
     scene.add(rightBuildings);
 
-    // Taxi
-    const taxi = createTaxiModel();
-    taxi.position.set(-8, 0, 0);
-    taxi.rotation.y = Math.PI / 6; // Slight angle
-    taxi.scale.setScalar(1.2);
-    scene.add(taxi);
-    taxiGroupRef.current = taxi;
+    // Taxi - Create placeholder group and load GLTF model
+    const taxiPlaceholder = new THREE.Group();
+    taxiPlaceholder.position.set(-8, 0, 0);
+    taxiPlaceholder.rotation.y = Math.PI / 6; // Slight angle
+    scene.add(taxiPlaceholder);
+    taxiGroupRef.current = taxiPlaceholder;
+
+    // Initialize GLTF loader with DRACO compression support
+    const gltfLoader = new GLTFLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    gltfLoader.setDRACOLoader(dracoLoader);
+    gltfLoaderRef.current = gltfLoader;
+
+    // Load taxi GLTF model
+    gltfLoader.load(
+      TAXI_MODEL_PATH,
+      (gltf) => {
+        console.log('Taxi GLTF model loaded successfully');
+        const taxiModel = gltf.scene;
+        
+        // Apply Osječki Taxi branding materials
+        taxiModel.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            
+            // Apply white body color with Osječki Taxi branding
+            if (child.material) {
+              const originalMaterial = child.material as THREE.MeshStandardMaterial;
+              child.material = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff, // White body
+                metalness: 0.4,
+                roughness: 0.2,
+                clearcoat: 1,
+                clearcoatRoughness: 0.1,
+                envMapIntensity: 1.5,
+              });
+            }
+          }
+        });
+        
+        // Scale and position the model appropriately
+        taxiModel.scale.setScalar(2.0); // Adjust based on model size
+        taxiModel.position.y = 0.35; // Ground the wheels
+        
+        // Clear placeholder and add loaded model
+        while (taxiPlaceholder.children.length > 0) {
+          taxiPlaceholder.remove(taxiPlaceholder.children[0]);
+        }
+        taxiPlaceholder.add(taxiModel);
+        
+        // Add taxi light
+        const taxiLight = new THREE.PointLight(0xffffee, 3, 15);
+        taxiLight.position.set(0, 3, 2);
+        taxiPlaceholder.add(taxiLight);
+        taxiLightRef.current = taxiLight;
+
+        // Add branded decals (blue stripes, gold accents)
+        addTaxiBranding(taxiPlaceholder);
+        
+        taxiModelLoadedRef.current = true;
+      },
+      (progress) => {
+        console.log('Loading taxi model:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
+      },
+      (error) => {
+        console.warn('Failed to load taxi GLTF model, using procedural model:', error);
+        // Fallback to procedural model
+        const proceduralTaxi = createTaxiModel();
+        proceduralTaxi.scale.setScalar(1.2);
+        while (taxiPlaceholder.children.length > 0) {
+          taxiPlaceholder.remove(taxiPlaceholder.children[0]);
+        }
+        taxiPlaceholder.add(proceduralTaxi);
+      }
+    );
 
     // Scooter
     const scooter = createScooterModel();
@@ -1349,12 +1509,13 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       }
 
       // Taxi idle animation
-      if (taxi) {
-        taxi.position.y = Math.sin(time * 1.2) * 0.06;
-        taxi.rotation.y = Math.PI / 6 + Math.sin(time * 0.35) * 0.02;
+      const taxiGroup = taxiGroupRef.current;
+      if (taxiGroup) {
+        taxiGroup.position.y = Math.sin(time * 1.2) * 0.06;
+        taxiGroup.rotation.y = Math.PI / 6 + Math.sin(time * 0.35) * 0.02;
         
-        taxi.children.forEach(child => {
-          if (child.name && child.name.startsWith('wheel-')) {
+        taxiGroup.traverse((child) => {
+          if (child.name && child.name.startsWith('wheel')) {
             child.rotation.x += 0.015;
           }
         });
