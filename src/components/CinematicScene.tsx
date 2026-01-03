@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import gsap from 'gsap';
 import osijekSkybox from '@/assets/osijek-skybox.jpg';
+import { useTimeOfDay } from '@/hooks/useTimeOfDay';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 
 interface CinematicSceneProps {
   onWorldSelect: (world: 'taxi' | 'food' | null) => void;
@@ -14,6 +17,7 @@ interface CinematicSceneProps {
 type SceneState = 'intro' | 'idle' | 'hover-taxi' | 'hover-food' | 'warp' | 'portal-opening' | 'driving';
 
 const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroComplete }) => {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -30,11 +34,40 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   const portalParticlesRef = useRef<THREE.Points | null>(null);
   const taxiLightRef = useRef<THREE.PointLight | null>(null);
   const scooterLightRef = useRef<THREE.PointLight | null>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
   const timeRef = useRef(0);
   
   const [sceneState, setSceneState] = useState<SceneState>('intro');
   const [isWarpAnimating, setIsWarpAnimating] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
+  
+  const timeOfDay = useTimeOfDay();
+  const { playSound } = useSoundEffects();
+
+  // Day/Night lighting configuration
+  const lightingConfig = {
+    day: {
+      ambientColor: 0x8899aa,
+      ambientIntensity: 0.8,
+      directionalColor: 0xffffff,
+      directionalIntensity: 1.2,
+      fogColor: 0x6688aa,
+      fogDensity: 0.008,
+      skyTint: new THREE.Color(0.6, 0.7, 0.9),
+      bloomStrength: 0.8,
+    },
+    night: {
+      ambientColor: 0x1a2030,
+      ambientIntensity: 0.5,
+      directionalColor: 0x6688aa,
+      directionalIntensity: 0.5,
+      fogColor: 0x050510,
+      fogDensity: 0.015,
+      skyTint: new THREE.Color(0.05, 0.05, 0.1),
+      bloomStrength: 1.5,
+    },
+  };
 
   // Create realistic Osječki Taxi with proper livery
   const createTaxiModel = useCallback(() => {
@@ -827,8 +860,8 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   }, []);
 
   // Create rain particles
-  const createRainParticles = useCallback(() => {
-    const count = 6000;
+  const createRainParticles = useCallback((isDay: boolean) => {
+    const count = isDay ? 3000 : 6000;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const velocities = new Float32Array(count);
@@ -844,10 +877,10 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 1));
 
     const material = new THREE.PointsMaterial({
-      color: 0x88aacc,
+      color: isDay ? 0xaaccee : 0x88aacc,
       size: 0.06,
       transparent: true,
-      opacity: 0.4,
+      opacity: isDay ? 0.3 : 0.4,
       blending: THREE.AdditiveBlending,
     });
 
@@ -924,13 +957,13 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   }, []);
 
   // Create realistic ground with reflections
-  const createGround = useCallback(() => {
+  const createGround = useCallback((isDay: boolean) => {
     const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
     const material = new THREE.MeshPhysicalMaterial({
-      color: 0x0a0a12,
-      metalness: 0.8,
-      roughness: 0.2,
-      envMapIntensity: 1.2,
+      color: isDay ? 0x2a2a3a : 0x0a0a12,
+      metalness: isDay ? 0.5 : 0.8,
+      roughness: isDay ? 0.4 : 0.2,
+      envMapIntensity: isDay ? 0.8 : 1.2,
     });
     const ground = new THREE.Mesh(geometry, material);
     ground.rotation.x = -Math.PI / 2;
@@ -988,13 +1021,16 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   }, []);
 
   // Create Osijek-style buildings
-  const createBuildings = useCallback((side: 'left' | 'right') => {
+  const createBuildings = useCallback((side: 'left' | 'right', isDay: boolean) => {
     const group = new THREE.Group();
     const xBase = side === 'left' ? -18 : 18;
     
     // Colors inspired by Osijek architecture
-    const buildingColors = [0x3a3a4a, 0x4a4a5a, 0x2a2a3a, 0x5a5a6a];
+    const buildingColors = isDay 
+      ? [0x8a8a8a, 0x9a9a9a, 0x7a7a7a, 0xa0a0a0]
+      : [0x3a3a4a, 0x4a4a5a, 0x2a2a3a, 0x5a5a6a];
     const windowColor = side === 'left' ? 0x00d4ff : 0xff9955;
+    const windowEmissive = isDay ? 0.1 : 0.4;
 
     const buildingCount = 10;
     
@@ -1027,7 +1063,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
           const windowMaterial = new THREE.MeshPhysicalMaterial({
             color: windowColor,
             emissive: windowColor,
-            emissiveIntensity: 0.4 + Math.random() * 0.4,
+            emissiveIntensity: windowEmissive + Math.random() * 0.4,
             transparent: true,
             opacity: 0.85,
           });
@@ -1051,9 +1087,12 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const isDay = timeOfDay === 'day';
+    const config = lightingConfig[timeOfDay];
+
     // Scene
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050510, 0.015);
+    scene.fog = new THREE.FogExp2(config.fogColor, config.fogDensity);
     sceneRef.current = scene;
 
     // Load Osijek skybox as background
@@ -1086,7 +1125,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.9;
+    renderer.toneMappingExposure = isDay ? 1.2 : 0.9;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -1097,7 +1136,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5,
+      config.bloomStrength,
       0.35,
       0.8
     );
@@ -1106,10 +1145,11 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     bloomPassRef.current = bloomPass;
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x1a2030, 0.5);
+    const ambientLight = new THREE.AmbientLight(config.ambientColor, config.ambientIntensity);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
 
-    const directionalLight = new THREE.DirectionalLight(0x6688aa, 0.5);
+    const directionalLight = new THREE.DirectionalLight(config.directionalColor, config.directionalIntensity);
     directionalLight.position.set(20, 30, 10);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 2048;
@@ -1121,18 +1161,19 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     directionalLight.shadow.camera.top = 35;
     directionalLight.shadow.camera.bottom = -35;
     scene.add(directionalLight);
+    directionalLightRef.current = directionalLight;
 
     // Build scene
-    const ground = createGround();
+    const ground = createGround(isDay);
     scene.add(ground);
 
     const road = createRoad();
     scene.add(road);
 
-    const leftBuildings = createBuildings('left');
+    const leftBuildings = createBuildings('left', isDay);
     scene.add(leftBuildings);
 
-    const rightBuildings = createBuildings('right');
+    const rightBuildings = createBuildings('right', isDay);
     scene.add(rightBuildings);
 
     // Taxi
@@ -1164,7 +1205,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     groundPortalRef.current = groundPortal;
 
     // Rain
-    const rain = createRainParticles();
+    const rain = createRainParticles(isDay);
     scene.add(rain);
     rainParticlesRef.current = rain;
 
@@ -1417,6 +1458,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       renderer.dispose();
     };
   }, [
+    timeOfDay,
     createTaxiModel,
     createScooterModel,
     createPortal,
@@ -1490,6 +1532,9 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     setIsWarpAnimating(true);
     setSceneState('warp');
+    
+    // Play sound effects
+    playSound('portalOpen');
 
     const portal = portalRef.current;
     const groundPortal = groundPortalRef.current;
@@ -1511,52 +1556,8 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     const warpTimeline = gsap.timeline({
       onComplete: () => {
-        // Reset everything
-        gsap.to(portal.scale, { x: 1, y: 1, z: 1, duration: 0.5 });
-        gsap.to(bloom, { strength: 1.5, duration: 0.5 });
-        
-        if (portalPlane && (portalPlane as THREE.Mesh).material) {
-          const mat = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
-          if (mat.uniforms) {
-            gsap.to(mat.uniforms.intensity, { value: 1, duration: 0.5 });
-          }
-        }
-        if (portalLight) {
-          gsap.to(portalLight, { intensity: 6, duration: 0.5 });
-        }
-
-        // Reset vehicle
-        gsap.to(vehicle.position, {
-          y: 0,
-          duration: 0.5,
-          onComplete: () => {
-            groundPortal.visible = false;
-            if (energyField && (energyField as THREE.Mesh).material) {
-              const mat = (energyField as THREE.Mesh).material as THREE.ShaderMaterial;
-              if (mat.uniforms) mat.uniforms.intensity.value = 0;
-            }
-            if (groundPortalLight) groundPortalLight.intensity = 0;
-            if (glowRing) {
-              const glowMat = (glowRing as THREE.Mesh).material as THREE.MeshBasicMaterial;
-              glowMat.opacity = 0;
-            }
-          }
-        });
-        
-        // Reset camera
-        gsap.to(camera.position, {
-          x: 0,
-          y: 5,
-          z: 20,
-          duration: 0.8,
-          ease: 'power2.out',
-          onUpdate: () => camera.lookAt(0, 2, 0),
-        });
-        
-        setTimeout(() => {
-          setIsWarpAnimating(false);
-          setSceneState('idle');
-        }, 800);
+        // Navigate to the appropriate page
+        navigate(selectedWorld === 'taxi' ? '/taxi' : '/food');
       },
     });
 
@@ -1582,6 +1583,11 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
         intensity: 15,
         duration: 0.5,
       }, 0.2);
+
+    // Play warp sound
+    warpTimeline.call(() => {
+      playSound('warp');
+    }, [], 0.5);
 
     // PHASE 2: Camera moves to bird's eye view
     warpTimeline.to(camera.position, {
@@ -1642,7 +1648,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       }
     }
 
-    // Flash white at climax
+    // Flash white at climax and navigate
     if (containerRef.current) {
       const flash = document.createElement('div');
       flash.style.cssText = `
@@ -1656,19 +1662,12 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       containerRef.current.appendChild(flash);
       
       warpTimeline.to(flash, {
-        opacity: 0.85,
-        duration: 0.25,
+        opacity: 1,
+        duration: 0.3,
         delay: 1.8,
-        onComplete: () => {
-          gsap.to(flash, {
-            opacity: 0,
-            duration: 0.6,
-            onComplete: () => flash.remove(),
-          });
-        },
       }, 0);
     }
-  }, [isWarpAnimating]);
+  }, [isWarpAnimating, navigate, playSound]);
 
   // Event handlers
   const handleMouseEnter = useCallback((world: 'taxi' | 'food') => {
