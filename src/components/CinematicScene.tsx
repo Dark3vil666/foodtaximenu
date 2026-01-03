@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -10,9 +11,10 @@ interface CinematicSceneProps {
   onIntroComplete: () => void;
 }
 
-type SceneState = 'intro' | 'idle' | 'hover-taxi' | 'hover-food' | 'warp';
+type SceneState = 'intro' | 'idle' | 'warp-taxi' | 'warp-food';
 
 const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroComplete }) => {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -34,16 +36,16 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   const [isWarpAnimating, setIsWarpAnimating] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
 
-  // Create taxi model with enhanced details
+  // Create taxi model with blue/yellow/white livery
   const createTaxiModel = useCallback(() => {
     const group = new THREE.Group();
     
-    // Car body - main chassis
+    // Car body - main chassis (white base)
     const bodyGeometry = new THREE.BoxGeometry(2.6, 0.9, 5);
     const bodyMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0a1428,
-      metalness: 0.95,
-      roughness: 0.05,
+      color: 0xf8f8f8,
+      metalness: 0.7,
+      roughness: 0.15,
       clearcoat: 1,
       clearcoatRoughness: 0.05,
       envMapIntensity: 2,
@@ -54,9 +56,52 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     body.receiveShadow = true;
     group.add(body);
 
+    // Blue checkered stripe on sides
+    const checkerMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x0066cc,
+      metalness: 0.5,
+      roughness: 0.3,
+      emissive: 0x001133,
+      emissiveIntensity: 0.2,
+    });
+    
+    const yellowMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffd700,
+      metalness: 0.6,
+      roughness: 0.2,
+      emissive: 0x332200,
+      emissiveIntensity: 0.3,
+    });
+
+    // Side checkered pattern
+    [-1.31, 1.31].forEach((x, sideIdx) => {
+      for (let i = 0; i < 8; i++) {
+        const isBlue = (i + sideIdx) % 2 === 0;
+        const checkerGeometry = new THREE.BoxGeometry(0.02, 0.3, 0.5);
+        const checker = new THREE.Mesh(checkerGeometry, isBlue ? checkerMaterial : yellowMaterial);
+        checker.position.set(x, 0.65, -1.5 + i * 0.5);
+        group.add(checker);
+      }
+    });
+
+    // Yellow diagonal stripes
+    [-1.32, 1.32].forEach((x) => {
+      const stripeGeometry = new THREE.BoxGeometry(0.02, 0.15, 2);
+      const stripe = new THREE.Mesh(stripeGeometry, yellowMaterial);
+      stripe.position.set(x, 0.35, 0);
+      stripe.rotation.z = 0.1;
+      group.add(stripe);
+    });
+
     // Hood slope
     const hoodGeometry = new THREE.BoxGeometry(2.4, 0.3, 1.5);
-    const hood = new THREE.Mesh(hoodGeometry, bodyMaterial);
+    const hoodMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xf8f8f8,
+      metalness: 0.8,
+      roughness: 0.1,
+      clearcoat: 1,
+    });
+    const hood = new THREE.Mesh(hoodGeometry, hoodMaterial);
     hood.position.set(0, 1.1, 1.8);
     hood.rotation.x = -0.15;
     hood.castShadow = true;
@@ -64,18 +109,18 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     // Trunk
     const trunkGeometry = new THREE.BoxGeometry(2.4, 0.3, 1.2);
-    const trunk = new THREE.Mesh(trunkGeometry, bodyMaterial);
+    const trunk = new THREE.Mesh(trunkGeometry, hoodMaterial);
     trunk.position.set(0, 1.0, -2.0);
     trunk.rotation.x = 0.1;
     trunk.castShadow = true;
     group.add(trunk);
 
-    // Cabin/Roof
+    // Cabin/Roof (blue)
     const cabinGeometry = new THREE.BoxGeometry(2.3, 0.75, 2.8);
     const cabinMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x050a14,
-      metalness: 0.9,
-      roughness: 0.1,
+      color: 0x0055aa,
+      metalness: 0.7,
+      roughness: 0.2,
       transparent: true,
       opacity: 0.95,
       clearcoat: 0.8,
@@ -132,11 +177,11 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       wheel.castShadow = true;
       wheelGroup.add(wheel);
 
-      // Chrome rim
+      // Chrome rim with blue accent
       const rimGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.32, 16);
       const rimMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x00d4ff,
-        emissive: 0x00d4ff,
+        color: 0x0066cc,
+        emissive: 0x0044aa,
         emissiveIntensity: 0.5,
         metalness: 1,
         roughness: 0,
@@ -144,16 +189,6 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       const rim = new THREE.Mesh(rimGeometry, rimMaterial);
       rim.rotation.z = Math.PI / 2;
       wheelGroup.add(rim);
-
-      // Rim spokes
-      for (let i = 0; i < 5; i++) {
-        const spokeGeometry = new THREE.BoxGeometry(0.05, 0.35, 0.02);
-        const spoke = new THREE.Mesh(spokeGeometry, rimMaterial);
-        spoke.rotation.z = Math.PI / 2;
-        spoke.rotation.x = (i / 5) * Math.PI * 2;
-        spoke.position.x = (pos.x > 0 ? 0.01 : -0.01);
-        wheelGroup.add(spoke);
-      }
 
       wheelGroup.position.set(pos.x, 0.4, pos.z);
       group.add(wheelGroup);
@@ -191,8 +226,8 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     // Taillights
     const taillightGeometry = new THREE.BoxGeometry(0.5, 0.18, 0.05);
     const taillightMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
+      color: 0xff3333,
+      emissive: 0xff0000,
       emissiveIntensity: 2,
     });
     
@@ -202,14 +237,13 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       group.add(taillight);
     });
 
-    // LED underglow strips
+    // LED underglow strips (blue)
     const underglowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00d4ff,
+      color: 0x0066cc,
       transparent: true,
       opacity: 0.6,
     });
 
-    // Side strips
     [-1.35, 1.35].forEach(x => {
       const sideStrip = new THREE.Mesh(
         new THREE.BoxGeometry(0.05, 0.02, 4.5),
@@ -219,7 +253,6 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       group.add(sideStrip);
     });
 
-    // Front/back strips
     [-2.4, 2.4].forEach(z => {
       const crossStrip = new THREE.Mesh(
         new THREE.BoxGeometry(2.5, 0.02, 0.05),
@@ -233,7 +266,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     const glowPlane = new THREE.Mesh(
       new THREE.PlaneGeometry(3, 5.5),
       new THREE.MeshBasicMaterial({
-        color: 0x00d4ff,
+        color: 0x0066cc,
         transparent: true,
         opacity: 0.25,
         side: THREE.DoubleSide,
@@ -243,19 +276,19 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     glowPlane.position.y = 0.02;
     group.add(glowPlane);
 
-    // Taxi sign on roof
+    // Taxi sign on roof (yellow with blue text effect)
     const signGeometry = new THREE.BoxGeometry(1, 0.3, 0.4);
     const signMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 2.5,
+      color: 0xffd700,
+      emissive: 0xffaa00,
+      emissiveIntensity: 2,
     });
     const sign = new THREE.Mesh(signGeometry, signMaterial);
     sign.position.set(0, 1.95, -0.2);
     group.add(sign);
 
     // Main taxi light
-    const taxiLight = new THREE.PointLight(0x00d4ff, 5, 20);
+    const taxiLight = new THREE.PointLight(0x0066cc, 5, 20);
     taxiLight.position.set(0, 3, 0);
     group.add(taxiLight);
     taxiLightRef.current = taxiLight;
@@ -263,14 +296,14 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     return group;
   }, []);
 
-  // Create food delivery model
+  // Create food delivery scooter with blue/yellow/white livery
   const createFoodDeliveryModel = useCallback(() => {
     const group = new THREE.Group();
 
-    // Scooter body frame
+    // Scooter body frame (blue)
     const frameGeometry = new THREE.BoxGeometry(0.6, 0.5, 2.2);
     const frameMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x2d1a0a,
+      color: 0x0055aa,
       metalness: 0.8,
       roughness: 0.2,
     });
@@ -280,10 +313,28 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     frame.receiveShadow = true;
     group.add(frame);
 
+    // Yellow accents on frame
+    const accentMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffd700,
+      metalness: 0.6,
+      roughness: 0.2,
+      emissive: 0x332200,
+      emissiveIntensity: 0.3,
+    });
+    
+    [-0.31, 0.31].forEach(x => {
+      const accent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.02, 0.4, 1.8),
+        accentMaterial
+      );
+      accent.position.set(x, 0.5, 0);
+      group.add(accent);
+    });
+
     // Seat
     const seatGeometry = new THREE.BoxGeometry(0.5, 0.15, 0.8);
     const seatMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x1a0a05,
+      color: 0x1a1a2e,
       metalness: 0.3,
       roughness: 0.8,
     });
@@ -294,7 +345,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     // Handlebar stem
     const stemGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
     const metalMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x444444,
+      color: 0x888888,
       metalness: 0.95,
       roughness: 0.1,
     });
@@ -336,12 +387,10 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     rearWheelGroup.castShadow = true;
     group.add(rearWheelGroup);
 
-    // Delivery box with warm glow
+    // Delivery box with blue/yellow/white checkered pattern
     const boxGeometry = new THREE.BoxGeometry(1.1, 0.85, 0.85);
     const boxMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xff6b35,
-      emissive: 0xff6b35,
-      emissiveIntensity: 0.5,
+      color: 0x0055aa,
       metalness: 0.2,
       roughness: 0.5,
     });
@@ -350,35 +399,36 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     box.castShadow = true;
     group.add(box);
 
-    // Box lid with steam vent
+    // Box checkered pattern
+    const whiteMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      metalness: 0.1,
+      roughness: 0.4,
+    });
+
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 3; j++) {
+        const isColored = (i + j) % 2 === 0;
+        const squareGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.02);
+        const square = new THREE.Mesh(squareGeometry, isColored ? accentMaterial : whiteMaterial);
+        square.position.set(-0.35 + i * 0.25, 1.15 + j * 0.25, -0.16);
+        group.add(square);
+      }
+    }
+
+    // Box lid
     const lidGeometry = new THREE.BoxGeometry(1.15, 0.1, 0.9);
     const lidMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xff8a55,
-      emissive: 0xff6b35,
+      color: 0xffd700,
+      emissive: 0xffaa00,
       emissiveIntensity: 0.3,
     });
     const lid = new THREE.Mesh(lidGeometry, lidMaterial);
     lid.position.set(0, 1.78, -0.6);
     group.add(lid);
 
-    // Box decorative stripes
-    const stripeMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffaa00,
-      emissive: 0xffaa00,
-      emissiveIntensity: 0.8,
-    });
-    
-    [-0.3, 0.3].forEach(z => {
-      const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(1.12, 0.05, 0.05),
-        stripeMaterial
-      );
-      stripe.position.set(0, 1.5, -0.6 + z);
-      group.add(stripe);
-    });
-
     // Warm ambient light
-    const foodLight = new THREE.PointLight(0xff6b35, 5, 20);
+    const foodLight = new THREE.PointLight(0xff8844, 5, 20);
     foodLight.position.set(0, 3, 0);
     group.add(foodLight);
     foodLightRef.current = foodLight;
@@ -406,56 +456,59 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     return group;
   }, []);
 
-  // Create energy portal with shader
+  // Create portal that rises from ground
   const createPortal = useCallback(() => {
     const group = new THREE.Group();
 
-    // Outer glowing ring
-    const outerRingGeometry = new THREE.TorusGeometry(3, 0.2, 64, 128);
-    const outerRingMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 3,
-      metalness: 0.95,
-      roughness: 0,
-      transparent: true,
-      opacity: 0.95,
-    });
-    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
-    outerRing.rotation.y = Math.PI / 2;
-    outerRing.name = 'outerRing';
-    group.add(outerRing);
-
-    // Middle ring
-    const middleRingGeometry = new THREE.TorusGeometry(2.5, 0.12, 64, 128);
-    const middleRingMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00ffff,
-      emissive: 0x00ffff,
+    // Portal frame (square rising from ground)
+    const frameThickness = 0.15;
+    const frameSize = 4;
+    const frameMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x0066cc,
+      emissive: 0x0044aa,
       emissiveIntensity: 2,
-      transparent: true,
-      opacity: 0.8,
+      metalness: 0.9,
+      roughness: 0.1,
     });
-    const middleRing = new THREE.Mesh(middleRingGeometry, middleRingMaterial);
-    middleRing.rotation.y = Math.PI / 2;
-    middleRing.name = 'middleRing';
-    group.add(middleRing);
 
-    // Inner ring
-    const innerRingGeometry = new THREE.TorusGeometry(2, 0.08, 64, 128);
-    const innerRingMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0088ff,
-      emissive: 0x0088ff,
-      emissiveIntensity: 2.5,
-      transparent: true,
-      opacity: 0.9,
-    });
-    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
-    innerRing.rotation.y = Math.PI / 2;
-    innerRing.name = 'innerRing';
-    group.add(innerRing);
+    // Top bar
+    const topBar = new THREE.Mesh(
+      new THREE.BoxGeometry(frameSize, frameThickness, frameThickness),
+      frameMaterial
+    );
+    topBar.position.y = frameSize / 2;
+    topBar.name = 'frameTop';
+    group.add(topBar);
+
+    // Bottom bar
+    const bottomBar = new THREE.Mesh(
+      new THREE.BoxGeometry(frameSize, frameThickness, frameThickness),
+      frameMaterial
+    );
+    bottomBar.position.y = -frameSize / 2;
+    bottomBar.name = 'frameBottom';
+    group.add(bottomBar);
+
+    // Left bar
+    const leftBar = new THREE.Mesh(
+      new THREE.BoxGeometry(frameThickness, frameSize, frameThickness),
+      frameMaterial
+    );
+    leftBar.position.x = -frameSize / 2;
+    leftBar.name = 'frameLeft';
+    group.add(leftBar);
+
+    // Right bar
+    const rightBar = new THREE.Mesh(
+      new THREE.BoxGeometry(frameThickness, frameSize, frameThickness),
+      frameMaterial
+    );
+    rightBar.position.x = frameSize / 2;
+    rightBar.name = 'frameRight';
+    group.add(rightBar);
 
     // Energy field plane with animated shader
-    const portalPlaneGeometry = new THREE.CircleGeometry(2.8, 128);
+    const portalPlaneGeometry = new THREE.PlaneGeometry(frameSize - 0.3, frameSize - 0.3, 64, 64);
     const portalPlaneMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -502,22 +555,22 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
           float pattern = swirl * 0.4 + wave1 * 0.3 + wave2 * 0.3;
           
           // Edge glow
-          float edge = smoothstep(0.5, 0.3, dist);
-          float rim = smoothstep(0.45, 0.5, dist) * (1.0 - smoothstep(0.5, 0.55, dist));
+          float edge = smoothstep(0.5, 0.2, dist);
+          float rim = smoothstep(0.4, 0.5, dist) * (1.0 - smoothstep(0.5, 0.6, dist));
           
           // Color mixing
           vec3 color = mix(color1, color2, pattern);
           color = mix(color, color3, rim * 2.0);
           
           // Alpha with intensity control
-          float alpha = edge * (0.4 + pattern * 0.3) * intensity;
+          float alpha = edge * (0.5 + pattern * 0.3) * intensity;
           alpha += rim * 0.8 * intensity;
           
           // Add sparkle
-          float sparkle = noise(vUv * 50.0 + time) * 0.1 * intensity;
+          float sparkle = noise(vUv * 50.0 + time) * 0.15 * intensity;
           alpha += sparkle * edge;
           
-          gl_FragColor = vec4(color, alpha * 0.7);
+          gl_FragColor = vec4(color, alpha * 0.85);
         }
       `,
       transparent: true,
@@ -526,12 +579,11 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       depthWrite: false,
     });
     const portalPlane = new THREE.Mesh(portalPlaneGeometry, portalPlaneMaterial);
-    portalPlane.rotation.y = Math.PI / 2;
     portalPlane.name = 'portalPlane';
     group.add(portalPlane);
 
     // Central core glow
-    const coreGeometry = new THREE.SphereGeometry(0.3, 32, 32);
+    const coreGeometry = new THREE.SphereGeometry(0.25, 32, 32);
     const coreMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
@@ -546,6 +598,10 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     portalLight.position.set(0, 0, 0);
     portalLight.name = 'portalLight';
     group.add(portalLight);
+
+    // Initially hidden below ground
+    group.position.y = -5;
+    group.visible = false;
 
     return group;
   }, []);
@@ -621,7 +677,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     for (let i = 0; i < count; i++) {
       angles[i] = Math.random() * Math.PI * 2;
-      radii[i] = 2.8 + Math.random() * 0.8;
+      radii[i] = 2.2 + Math.random() * 0.6;
       speeds[i] = 0.3 + Math.random() * 0.8;
       offsets[i] = Math.random() * Math.PI * 2;
       
@@ -644,7 +700,9 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       blending: THREE.AdditiveBlending,
     });
 
-    return new THREE.Points(geometry, material);
+    const particles = new THREE.Points(geometry, material);
+    particles.visible = false;
+    return particles;
   }, []);
 
   // Create reflective ground
@@ -777,15 +835,15 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     scene.fog = new THREE.FogExp2(0x050510, 0.012);
     sceneRef.current = scene;
 
-    // Camera
+    // Camera - STATIC position
     const camera = new THREE.PerspectiveCamera(
       55,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
-    camera.position.set(0, 8, 30);
-    camera.lookAt(0, 2, 0);
+    camera.position.set(0, 6, 24);
+    camera.lookAt(0, 1, 0);
     cameraRef.current = camera;
 
     // Renderer
@@ -851,21 +909,21 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     // Taxi
     const taxi = createTaxiModel();
-    taxi.position.set(-10, 0, 0);
+    taxi.position.set(-8, 0, 0);
     taxi.scale.setScalar(1.3);
     scene.add(taxi);
     taxiGroupRef.current = taxi;
 
     // Food delivery
     const food = createFoodDeliveryModel();
-    food.position.set(10, 0, 0);
+    food.position.set(8, 0, 0);
     food.scale.setScalar(1.6);
     scene.add(food);
     foodGroupRef.current = food;
 
-    // Portal
+    // Portal (hidden initially)
     const portal = createPortal();
-    portal.position.set(0, 3.5, 0);
+    portal.position.set(0, 0, 0);
     scene.add(portal);
     portalRef.current = portal;
 
@@ -876,20 +934,19 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     // Steam (positioned at food delivery)
     const steam = createSteamParticles();
-    steam.position.set(10, 1.5, -0.6);
+    steam.position.set(8, 1.5, -0.6);
     scene.add(steam);
     steamParticlesRef.current = steam;
 
     // Portal particles
     const portalParticles = createPortalParticles();
-    portalParticles.position.copy(portal.position);
     scene.add(portalParticles);
     portalParticlesRef.current = portalParticles;
 
     // Start with screen black
     renderer.domElement.style.opacity = '0';
 
-    // CINEMATIC INTRO ANIMATION
+    // CINEMATIC INTRO ANIMATION (no camera movement - just fade in)
     const introTimeline = gsap.timeline({
       onComplete: () => {
         setIntroComplete(true);
@@ -899,70 +956,31 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     });
 
     introTimeline
-      // Fade in from black
       .to(renderer.domElement, { 
         opacity: 1, 
-        duration: 1.5, 
-        ease: 'power2.out' 
-      })
-      // Start at taxi - close up
-      .fromTo(
-        camera.position,
-        { x: -18, y: 2.5, z: 8 },
-        { x: -12, y: 3, z: 10, duration: 2, ease: 'power2.inOut' },
-        0.3
-      )
-      // Intensify taxi lights during focus
-      .to(taxiLightRef.current!, { 
-        intensity: 10, 
-        duration: 1, 
-        ease: 'power2.out' 
-      }, 0.5)
-      .to(taxiLightRef.current!, { 
-        intensity: 5, 
-        duration: 0.5 
-      }, 1.5)
-      // Pan across to food
-      .to(camera.position, { 
-        x: 12, 
-        y: 3, 
-        z: 10, 
-        duration: 2.5, 
-        ease: 'power2.inOut' 
-      })
-      // Intensify food lights
-      .to(foodLightRef.current!, { 
-        intensity: 10, 
-        duration: 1, 
-        ease: 'power2.out' 
-      }, 2.5)
-      .to(foodLightRef.current!, { 
-        intensity: 5, 
-        duration: 0.5 
-      }, 3.5)
-      // Pull back to center view
-      .to(camera.position, { 
-        x: 0, 
-        y: 5, 
-        z: 22, 
         duration: 2, 
         ease: 'power2.out' 
       })
-      // Portal pulse at end
-      .to(portal.scale, { 
-        x: 1.15, 
-        y: 1.15, 
-        z: 1.15, 
-        duration: 0.3, 
+      // Pulse taxi lights
+      .to(taxiLightRef.current!, { 
+        intensity: 10, 
+        duration: 0.8, 
         ease: 'power2.out' 
-      }, '-=0.5')
-      .to(portal.scale, { 
-        x: 1, 
-        y: 1, 
-        z: 1, 
-        duration: 0.3, 
-        ease: 'power2.in' 
-      });
+      }, 1)
+      .to(taxiLightRef.current!, { 
+        intensity: 5, 
+        duration: 0.5 
+      }, 1.8)
+      // Pulse food lights
+      .to(foodLightRef.current!, { 
+        intensity: 10, 
+        duration: 0.8, 
+        ease: 'power2.out' 
+      }, 1.5)
+      .to(foodLightRef.current!, { 
+        intensity: 5, 
+        duration: 0.5 
+      }, 2.3);
 
     // Animation loop
     const animate = () => {
@@ -970,62 +988,50 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       timeRef.current += 0.016;
       const time = timeRef.current;
 
-      // Update portal shader
-      const portalPlane = portal.children.find(c => c.name === 'portalPlane');
-      if (portalPlane && (portalPlane as THREE.Mesh).material) {
-        const material = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
-        if (material.uniforms) {
-          material.uniforms.time.value = time;
+      // Update portal shader if visible
+      if (portal.visible) {
+        const portalPlane = portal.children.find(c => c.name === 'portalPlane');
+        if (portalPlane && (portalPlane as THREE.Mesh).material) {
+          const material = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
+          if (material.uniforms) {
+            material.uniforms.time.value = time;
+          }
         }
-      }
 
-      // Portal continuous rotation
-      portal.rotation.y += 0.008;
-      portal.rotation.z = Math.sin(time * 0.5) * 0.08;
+        // Portal glow pulse
+        const portalLight = portal.children.find(c => c.name === 'portalLight') as THREE.PointLight;
+        if (portalLight) {
+          portalLight.intensity = 8 + Math.sin(time * 2) * 2;
+        }
 
-      // Portal rings counter-rotation
-      const outerRing = portal.children.find(c => c.name === 'outerRing');
-      const middleRing = portal.children.find(c => c.name === 'middleRing');
-      const innerRing = portal.children.find(c => c.name === 'innerRing');
-      if (outerRing) outerRing.rotation.x += 0.003;
-      if (middleRing) middleRing.rotation.x -= 0.005;
-      if (innerRing) innerRing.rotation.x += 0.007;
-
-      // Portal glow pulse
-      const portalLight = portal.children.find(c => c.name === 'portalLight') as THREE.PointLight;
-      if (portalLight) {
-        portalLight.intensity = 8 + Math.sin(time * 2) * 2;
-      }
-
-      // Core pulse
-      const core = portal.children.find(c => c.name === 'core') as THREE.Mesh;
-      if (core) {
-        const scale = 1 + Math.sin(time * 3) * 0.2;
-        core.scale.setScalar(scale);
+        // Core pulse
+        const core = portal.children.find(c => c.name === 'core') as THREE.Mesh;
+        if (core) {
+          const scale = 1 + Math.sin(time * 3) * 0.2;
+          core.scale.setScalar(scale);
+        }
       }
 
       // Taxi idle animation - floating and wheel rotation
       if (taxi) {
-        taxi.position.y = Math.sin(time * 1.5) * 0.08;
-        taxi.rotation.y = Math.sin(time * 0.4) * 0.03;
+        taxi.position.y = Math.sin(time * 1.5) * 0.05;
         
         // Wheel rotation
         taxi.children.forEach(child => {
           if (child.name && child.name.startsWith('wheel-')) {
-            child.rotation.x += 0.02;
+            child.rotation.x += 0.01;
           }
         });
       }
 
       // Food delivery idle animation
       if (food) {
-        food.position.y = Math.sin(time * 1.5 + 1) * 0.06;
-        food.rotation.y = Math.sin(time * 0.4 + 1) * 0.025;
+        food.position.y = Math.sin(time * 1.5 + 1) * 0.04;
         
         // Wheel rotation
         food.children.forEach(child => {
           if (child.name && child.name.startsWith('wheel-')) {
-            child.rotation.x += 0.015;
+            child.rotation.x += 0.008;
           }
         });
       }
@@ -1037,7 +1043,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
         
         for (let i = 0; i < positions.length / 3; i++) {
           positions[i * 3 + 1] -= velocities[i];
-          positions[i * 3] += Math.sin(time + i) * 0.001; // Slight wind
+          positions[i * 3] += Math.sin(time + i) * 0.001;
           
           if (positions[i * 3 + 1] < 0) {
             positions[i * 3 + 1] = 40;
@@ -1071,8 +1077,8 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
         steamParticlesRef.current.geometry.attributes.position.needsUpdate = true;
       }
 
-      // Portal particles orbiting
-      if (portalParticlesRef.current) {
+      // Portal particles orbiting (if visible)
+      if (portalParticlesRef.current && portalParticlesRef.current.visible) {
         const positions = portalParticlesRef.current.geometry.attributes.position.array as Float32Array;
         const angles = portalParticlesRef.current.geometry.attributes.angle.array as Float32Array;
         const radii = portalParticlesRef.current.geometry.attributes.radius.array as Float32Array;
@@ -1081,7 +1087,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
         for (let i = 0; i < positions.length / 3; i++) {
           angles[i] += speeds[i] * 0.015;
-          const wobble = Math.sin(time + offsets[i]) * 0.3;
+          const wobble = Math.sin(time + offsets[i]) * 0.2;
           positions[i * 3] = wobble;
           positions[i * 3 + 1] = radii[i] * Math.sin(angles[i]);
           positions[i * 3 + 2] = radii[i] * Math.cos(angles[i]);
@@ -1128,142 +1134,131 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     onIntroComplete,
   ]);
 
-  // HOVER CAMERA MOVEMENT
-  useEffect(() => {
-    if (!cameraRef.current || !introComplete || isWarpAnimating) return;
-
-    const camera = cameraRef.current;
-
-    let targetPos = { x: 0, y: 5, z: 22 };
-    let targetLookAt = { x: 0, y: 2, z: 0 };
-
-    if (sceneState === 'hover-taxi') {
-      targetPos = { x: -6, y: 3.5, z: 14 };
-      targetLookAt = { x: -10, y: 1, z: 0 };
-      
-      // Intensify taxi light
-      if (taxiLightRef.current) {
-        gsap.to(taxiLightRef.current, { intensity: 10, duration: 0.5 });
-      }
-      if (foodLightRef.current) {
-        gsap.to(foodLightRef.current, { intensity: 3, duration: 0.5 });
-      }
-    } else if (sceneState === 'hover-food') {
-      targetPos = { x: 6, y: 3.5, z: 14 };
-      targetLookAt = { x: 10, y: 1, z: 0 };
-      
-      // Intensify food light
-      if (foodLightRef.current) {
-        gsap.to(foodLightRef.current, { intensity: 10, duration: 0.5 });
-      }
-      if (taxiLightRef.current) {
-        gsap.to(taxiLightRef.current, { intensity: 3, duration: 0.5 });
-      }
-    } else {
-      // Reset lights
-      if (taxiLightRef.current) {
-        gsap.to(taxiLightRef.current, { intensity: 5, duration: 0.5 });
-      }
-      if (foodLightRef.current) {
-        gsap.to(foodLightRef.current, { intensity: 5, duration: 0.5 });
-      }
-    }
-
-    gsap.to(camera.position, {
-      x: targetPos.x,
-      y: targetPos.y,
-      z: targetPos.z,
-      duration: 0.8,
-      ease: 'power2.out',
-      onUpdate: () => {
-        camera.lookAt(
-          targetLookAt.x,
-          targetLookAt.y,
-          targetLookAt.z
-        );
-      },
-    });
-  }, [sceneState, introComplete, isWarpAnimating]);
-
-  // PORTAL WARP ANIMATION
+  // PORTAL WARP ANIMATION - portal rises from ground and sucks vehicle
   const triggerWarpAnimation = useCallback((selectedWorld: 'taxi' | 'food') => {
     if (!portalRef.current || !cameraRef.current || !bloomPassRef.current || isWarpAnimating) return;
 
     setIsWarpAnimating(true);
-    setSceneState('warp');
+    setSceneState(selectedWorld === 'taxi' ? 'warp-taxi' : 'warp-food');
+    onWorldSelect(selectedWorld);
 
     const portal = portalRef.current;
     const camera = cameraRef.current;
     const bloom = bloomPassRef.current;
+    const vehicle = selectedWorld === 'taxi' ? taxiGroupRef.current : foodGroupRef.current;
+    const vehicleX = selectedWorld === 'taxi' ? -8 : 8;
+
+    if (!vehicle) return;
 
     // Get portal shader for intensity control
     const portalPlane = portal.children.find(c => c.name === 'portalPlane');
     const portalLight = portal.children.find(c => c.name === 'portalLight') as THREE.PointLight;
 
+    // Show portal and particles
+    portal.visible = true;
+    if (portalParticlesRef.current) {
+      portalParticlesRef.current.visible = true;
+    }
+
+    // Position portal at vehicle location, below ground
+    portal.position.set(vehicleX, -4, 0);
+    portal.rotation.x = -Math.PI / 2; // Lay flat on ground
+    if (portalParticlesRef.current) {
+      portalParticlesRef.current.position.set(vehicleX, 0, 0);
+    }
+
     const warpTimeline = gsap.timeline({
       onComplete: () => {
-        // Reset after animation
-        gsap.to(portal.scale, { x: 1, y: 1, z: 1, duration: 0.5 });
-        gsap.to(bloom, { strength: 1.8, duration: 0.5 });
-        if (portalPlane && (portalPlane as THREE.Mesh).material) {
-          const mat = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
-          if (mat.uniforms) {
-            gsap.to(mat.uniforms.intensity, { value: 1, duration: 0.5 });
-          }
-        }
-        if (portalLight) {
-          gsap.to(portalLight, { intensity: 8, duration: 0.5 });
-        }
-        
+        // Navigate to page
         setTimeout(() => {
-          setIsWarpAnimating(false);
-          setSceneState('idle');
-        }, 500);
+          navigate(selectedWorld === 'taxi' ? '/taxi' : '/food');
+        }, 200);
       },
     });
 
-    // Rapid portal expansion
+    // Phase 1: Camera zooms to vehicle
     warpTimeline
-      .to(portal.scale, { 
-        x: 6, 
-        y: 6, 
-        z: 6, 
-        duration: 0.8, 
-        ease: 'power2.in' 
+      .to(camera.position, {
+        x: vehicleX * 0.3,
+        y: 4,
+        z: 12,
+        duration: 0.8,
+        ease: 'power2.out',
+        onUpdate: () => {
+          camera.lookAt(vehicleX, 0, 0);
+        },
       })
-      // Increase bloom
-      .to(bloom, { 
-        strength: 4, 
-        duration: 0.5, 
-        ease: 'power2.in' 
-      }, 0)
-      // Portal glow intensifies
-      .to(portalLight, { 
-        intensity: 30, 
-        duration: 0.6 
-      }, 0);
+      // Phase 2: Portal rises from ground
+      .to(portal.position, {
+        y: 0.1,
+        duration: 1,
+        ease: 'power2.out',
+      }, 0.3)
+      .to(bloom, {
+        strength: 2.5,
+        duration: 0.8,
+      }, 0.3);
 
-    // Shader intensity
+    // Intensify portal glow during rise
+    if (portalLight) {
+      warpTimeline.to(portalLight, {
+        intensity: 20,
+        duration: 1,
+      }, 0.3);
+    }
+
     if (portalPlane && (portalPlane as THREE.Mesh).material) {
       const mat = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
       if (mat.uniforms) {
-        warpTimeline.to(mat.uniforms.intensity, { 
-          value: 3, 
-          duration: 0.6 
-        }, 0);
+        warpTimeline.to(mat.uniforms.intensity, {
+          value: 2,
+          duration: 0.8,
+        }, 0.3);
       }
     }
 
-    // Camera rushes toward portal
-    warpTimeline.to(camera.position, { 
-      x: 0, 
-      y: 3.5, 
-      z: 5, 
-      duration: 0.7, 
-      ease: 'power3.in' 
-    }, 0.1);
+    // Phase 3: Vehicle gets sucked into portal
+    warpTimeline
+      .to(vehicle.position, {
+        y: -3,
+        duration: 1.2,
+        ease: 'power2.in',
+      }, 1.2)
+      .to(vehicle.scale, {
+        x: 0.3,
+        y: 0.3,
+        z: 0.3,
+        duration: 1.2,
+        ease: 'power2.in',
+      }, 1.2)
+      .to(vehicle.rotation, {
+        y: Math.PI * 2,
+        duration: 1.2,
+        ease: 'power2.in',
+      }, 1.2);
 
-    // Flash white
+    // Phase 4: Portal collapses and screen flashes
+    warpTimeline
+      .to(portal.scale, {
+        x: 0.1,
+        y: 0.1,
+        z: 0.1,
+        duration: 0.4,
+        ease: 'power3.in',
+      }, 2.3)
+      .to(bloom, {
+        strength: 5,
+        duration: 0.3,
+      }, 2.3);
+
+    if (portalLight) {
+      warpTimeline.to(portalLight, {
+        intensity: 50,
+        duration: 0.3,
+      }, 2.3);
+    }
+
+    // Flash white at end
     if (containerRef.current) {
       const flash = document.createElement('div');
       flash.style.cssText = `
@@ -1276,34 +1271,18 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       `;
       containerRef.current.appendChild(flash);
       
-      gsap.to(flash, { 
-        opacity: 0.9, 
-        duration: 0.3, 
-        delay: 0.5,
+      gsap.to(flash, {
+        opacity: 1,
+        duration: 0.3,
+        delay: 2.4,
         onComplete: () => {
-          gsap.to(flash, { 
-            opacity: 0, 
-            duration: 0.5, 
-            onComplete: () => flash.remove() 
-          });
-        }
+          // Keep white during navigation
+        },
       });
     }
-  }, [isWarpAnimating]);
+  }, [isWarpAnimating, navigate, onWorldSelect]);
 
-  // Event handlers
-  const handleMouseEnter = useCallback((world: 'taxi' | 'food') => {
-    if (!introComplete || isWarpAnimating) return;
-    setSceneState(world === 'taxi' ? 'hover-taxi' : 'hover-food');
-    onWorldSelect(world);
-  }, [introComplete, isWarpAnimating, onWorldSelect]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (!introComplete || isWarpAnimating) return;
-    setSceneState('idle');
-    onWorldSelect(null);
-  }, [introComplete, isWarpAnimating, onWorldSelect]);
-
+  // Click handler
   const handleClick = useCallback((world: 'taxi' | 'food') => {
     if (!introComplete || isWarpAnimating) return;
     triggerWarpAnimation(world);
@@ -1313,22 +1292,24 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     <div className="fixed inset-0 overflow-hidden">
       <div ref={containerRef} className="absolute inset-0" />
       
-      {/* Left hover/click zone - TAXI */}
+      {/* Left click zone - TAXI */}
       <div
         className="absolute left-0 top-0 w-1/2 h-full cursor-pointer z-10"
-        onMouseEnter={() => handleMouseEnter('taxi')}
-        onMouseLeave={handleMouseLeave}
         onClick={() => handleClick('taxi')}
-        onTouchEnd={() => handleClick('taxi')}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          handleClick('taxi');
+        }}
       />
       
-      {/* Right hover/click zone - FOOD */}
+      {/* Right click zone - FOOD */}
       <div
         className="absolute right-0 top-0 w-1/2 h-full cursor-pointer z-10"
-        onMouseEnter={() => handleMouseEnter('food')}
-        onMouseLeave={handleMouseLeave}
         onClick={() => handleClick('food')}
-        onTouchEnd={() => handleClick('food')}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          handleClick('food');
+        }}
       />
     </div>
   );
