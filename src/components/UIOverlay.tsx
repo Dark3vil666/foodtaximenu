@@ -1,12 +1,14 @@
 import React from 'react';
+import { Car, Utensils } from 'lucide-react';
 
 interface UIOverlayProps {
   isIntroComplete: boolean;
   hoveredWorld: 'taxi' | 'food' | null;
   isWarpAnimating?: boolean;
+  onSelectWorld?: (world: 'taxi' | 'food') => void;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) => {
+const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld, isWarpAnimating, onSelectWorld }) => {
   return (
     <div className="fixed inset-0 pointer-events-none z-20">
       {/* Top left branding */}
@@ -24,55 +26,82 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) 
         </div>
       </div>
 
-      {/* Center title */}
+      {/* Center content - futuristic Croatian text */}
       <div 
-        className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center transition-all duration-1000 ${
+        className={`absolute top-[15%] left-1/2 -translate-x-1/2 text-center transition-all duration-1000 ${
           isIntroComplete ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
         }`}
         style={{ transitionDelay: '1s' }}
       >
-        <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold tracking-wider mb-4 text-gradient-neon">
-          One portal.
+        <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-wider mb-4 text-gradient-neon">
+          BUDUĆNOST JE STIGLA
         </h1>
-        <h1 className="font-display text-4xl md:text-6xl lg:text-7xl font-bold tracking-wider mb-8 text-gradient-neon">
-          Two worlds.
-        </h1>
-        <p className="font-body text-lg md:text-xl text-muted-foreground tracking-[0.2em] uppercase">
-          Taxi & Food delivery — cinematic 3D experience
+        <p className="font-body text-lg md:text-xl text-muted-foreground tracking-[0.15em] uppercase mb-2">
+          Jedan portal. Dva svijeta.
+        </p>
+        <p className="font-body text-base text-muted-foreground/70 tracking-widest">
+          Taxi & Dostava hrane — Osijek 2026
         </p>
       </div>
 
-      {/* World labels */}
+      {/* VISIBLE SELECTION BUTTONS - Always visible when intro complete */}
       <div 
-        className={`absolute top-1/2 left-[15%] -translate-y-1/2 transition-all duration-500 ${
-          hoveredWorld === 'taxi' ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+        className={`absolute bottom-[20%] left-1/2 -translate-x-1/2 flex gap-8 md:gap-16 transition-all duration-1000 ${
+          isIntroComplete && !isWarpAnimating ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
         }`}
+        style={{ transitionDelay: '1.2s' }}
       >
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-primary/50 flex items-center justify-center glow-border">
-            <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h8m-8 4h4m4 0h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        {/* TAXI Button */}
+        <button 
+          onClick={() => onSelectWorld?.('taxi')}
+          className={`pointer-events-auto group flex flex-col items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer
+            ${hoveredWorld === 'taxi' 
+              ? 'border-primary bg-primary/20 scale-105 shadow-[0_0_40px_hsl(var(--primary)/0.5)]' 
+              : 'border-primary/40 bg-primary/5 hover:border-primary hover:bg-primary/15 hover:scale-105 hover:shadow-[0_0_30px_hsl(var(--primary)/0.3)]'
+            }`}
+        >
+          <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center transition-all duration-300
+            ${hoveredWorld === 'taxi' 
+              ? 'border-primary bg-primary/30 shadow-[0_0_25px_hsl(var(--primary)/0.6)]' 
+              : 'border-primary/50 bg-primary/10 group-hover:border-primary group-hover:bg-primary/20'
+            }`}>
+            <Car className={`w-10 h-10 transition-colors duration-300 ${hoveredWorld === 'taxi' ? 'text-primary' : 'text-primary/70 group-hover:text-primary'}`} />
           </div>
-          <h2 className="font-display text-2xl neon-text-blue tracking-wider">TAXI</h2>
-          <p className="font-body text-sm text-muted-foreground mt-2">Click to enter</p>
-        </div>
-      </div>
+          <div className="text-center">
+            <h2 className={`font-display text-2xl tracking-wider transition-colors duration-300 ${hoveredWorld === 'taxi' ? 'neon-text-blue' : 'text-primary/80 group-hover:text-primary'}`}>
+              TAXI
+            </h2>
+            <p className="font-body text-sm text-muted-foreground mt-1">
+              Naruči vožnju
+            </p>
+          </div>
+        </button>
 
-      <div 
-        className={`absolute top-1/2 right-[15%] -translate-y-1/2 transition-all duration-500 ${
-          hoveredWorld === 'food' ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-        }`}
-      >
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full border-2 border-secondary/50 flex items-center justify-center" style={{ boxShadow: '0 0 20px hsl(var(--neon-orange) / 0.3)' }}>
-            <svg className="w-8 h-8 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        {/* FOOD Button */}
+        <button 
+          onClick={() => onSelectWorld?.('food')}
+          className={`pointer-events-auto group flex flex-col items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-300 cursor-pointer
+            ${hoveredWorld === 'food' 
+              ? 'border-secondary bg-secondary/20 scale-105 shadow-[0_0_40px_hsl(var(--neon-orange)/0.5)]' 
+              : 'border-secondary/40 bg-secondary/5 hover:border-secondary hover:bg-secondary/15 hover:scale-105 hover:shadow-[0_0_30px_hsl(var(--neon-orange)/0.3)]'
+            }`}
+        >
+          <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center transition-all duration-300
+            ${hoveredWorld === 'food' 
+              ? 'border-secondary bg-secondary/30 shadow-[0_0_25px_hsl(var(--neon-orange)/0.6)]' 
+              : 'border-secondary/50 bg-secondary/10 group-hover:border-secondary group-hover:bg-secondary/20'
+            }`}>
+            <Utensils className={`w-10 h-10 transition-colors duration-300 ${hoveredWorld === 'food' ? 'text-secondary' : 'text-secondary/70 group-hover:text-secondary'}`} />
           </div>
-          <h2 className="font-display text-2xl neon-text-orange tracking-wider">FOOD</h2>
-          <p className="font-body text-sm text-muted-foreground mt-2">Click to enter</p>
-        </div>
+          <div className="text-center">
+            <h2 className={`font-display text-2xl tracking-wider transition-colors duration-300 ${hoveredWorld === 'food' ? 'neon-text-orange' : 'text-secondary/80 group-hover:text-secondary'}`}>
+              HRANA
+            </h2>
+            <p className="font-body text-sm text-muted-foreground mt-1">
+              Naruči dostavu
+            </p>
+          </div>
+        </button>
       </div>
 
       {/* Side indicators */}
@@ -87,7 +116,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) 
             hoveredWorld === 'taxi' ? 'bg-primary shadow-[0_0_20px_hsl(var(--neon-blue)/0.8)]' : 'bg-muted'
           }`} />
           <span className="font-display text-xs tracking-[0.2em] text-muted-foreground rotate-[-90deg] whitespace-nowrap origin-center">
-            TAXI WORLD
+            TAXI
           </span>
         </div>
       </div>
@@ -103,7 +132,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) 
             hoveredWorld === 'food' ? 'bg-secondary shadow-[0_0_20px_hsl(var(--neon-orange)/0.8)]' : 'bg-muted'
           }`} />
           <span className="font-display text-xs tracking-[0.2em] text-muted-foreground rotate-90 whitespace-nowrap origin-center">
-            FOOD WORLD
+            HRANA
           </span>
         </div>
       </div>
@@ -116,25 +145,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld }) 
         style={{ transitionDelay: '2s' }}
       >
         <p className="font-body text-sm text-muted-foreground tracking-[0.15em]">
-          © 2024 OSJEČKI TAXI
+          © 2026 OSJEČKI TAXI
         </p>
-      </div>
-
-      {/* Scroll indicator */}
-      <div 
-        className={`absolute bottom-20 left-1/2 -translate-x-1/2 transition-all duration-1000 ${
-          isIntroComplete && !hoveredWorld ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{ transitionDelay: '2.5s' }}
-      >
-        <div className="flex flex-col items-center gap-2">
-          <span className="font-body text-xs text-muted-foreground tracking-widest uppercase">
-            Hover to explore
-          </span>
-          <div className="w-6 h-10 rounded-full border border-muted-foreground/30 flex items-start justify-center p-2">
-            <div className="w-1 h-2 rounded-full bg-primary animate-bounce" />
-          </div>
-        </div>
       </div>
 
       {/* Corner decorations */}

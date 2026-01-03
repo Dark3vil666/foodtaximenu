@@ -14,9 +14,14 @@ const LoadingScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Loading text */}
-        <div className="font-display text-xl tracking-[0.5em] text-primary mb-4">
-          LOADING
+        {/* Brand name */}
+        <div className="font-display text-3xl tracking-[0.3em] text-primary mb-2 animate-pulse">
+          OSJEČKI TAXI
+        </div>
+
+        {/* Year */}
+        <div className="font-display text-xl tracking-[0.5em] text-primary/70 mb-6">
+          2026
         </div>
         
         {/* Progress bar */}
@@ -26,7 +31,7 @@ const LoadingScreen: React.FC = () => {
 
         {/* Subtitle */}
         <p className="font-body text-sm text-muted-foreground mt-6 tracking-widest">
-          Initializing cinematic experience...
+          Učitavanje kinematskog iskustva...
         </p>
       </div>
 
@@ -35,7 +40,7 @@ const LoadingScreen: React.FC = () => {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span className="font-display text-xs tracking-[0.2em] text-muted-foreground">
-            OSJEČKI TAXI
+            031 — OSIJEK
           </span>
         </div>
       </div>

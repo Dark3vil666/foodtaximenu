@@ -296,42 +296,64 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     return group;
   }, []);
 
-  // Create food delivery scooter with blue/yellow/white livery
+  // Create food delivery scooter with WHITE-BLUE livery and yellow checkered bag
   const createFoodDeliveryModel = useCallback(() => {
     const group = new THREE.Group();
 
-    // Scooter body frame (blue)
-    const frameGeometry = new THREE.BoxGeometry(0.6, 0.5, 2.2);
-    const frameMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0055aa,
-      metalness: 0.8,
-      roughness: 0.2,
+    // WHITE material for scooter body
+    const whiteMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      metalness: 0.7,
+      roughness: 0.15,
+      clearcoat: 1,
+      clearcoatRoughness: 0.05,
     });
-    const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+
+    // BLUE accent material
+    const blueMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x0066cc,
+      metalness: 0.6,
+      roughness: 0.2,
+      emissive: 0x001133,
+      emissiveIntensity: 0.3,
+    });
+
+    // YELLOW material for checkered pattern
+    const yellowMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffd700,
+      metalness: 0.5,
+      roughness: 0.2,
+      emissive: 0x332200,
+      emissiveIntensity: 0.3,
+    });
+
+    // Scooter body frame (WHITE base)
+    const frameGeometry = new THREE.BoxGeometry(0.6, 0.5, 2.2);
+    const frame = new THREE.Mesh(frameGeometry, whiteMaterial);
     frame.position.y = 0.5;
     frame.castShadow = true;
     frame.receiveShadow = true;
     group.add(frame);
 
-    // Yellow accents on frame
-    const accentMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffd700,
-      metalness: 0.6,
-      roughness: 0.2,
-      emissive: 0x332200,
-      emissiveIntensity: 0.3,
-    });
-    
+    // Blue accents on frame sides
     [-0.31, 0.31].forEach(x => {
       const accent = new THREE.Mesh(
         new THREE.BoxGeometry(0.02, 0.4, 1.8),
-        accentMaterial
+        blueMaterial
       );
       accent.position.set(x, 0.5, 0);
       group.add(accent);
     });
 
-    // Seat
+    // Blue stripe on top of frame
+    const topStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.02, 1.6),
+      blueMaterial
+    );
+    topStripe.position.set(0, 0.76, 0);
+    group.add(topStripe);
+
+    // Seat (dark)
     const seatGeometry = new THREE.BoxGeometry(0.5, 0.15, 0.8);
     const seatMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x1a1a2e,
@@ -342,7 +364,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     seat.position.set(0, 0.85, -0.3);
     group.add(seat);
 
-    // Handlebar stem
+    // Handlebar stem (chrome with blue tip)
     const stemGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
     const metalMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x888888,
@@ -355,7 +377,7 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     // Handlebar
     const handleGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8);
-    const handle = new THREE.Mesh(handleGeometry, metalMaterial);
+    const handle = new THREE.Mesh(handleGeometry, blueMaterial);
     handle.rotation.z = Math.PI / 2;
     handle.position.set(0, 1.3, 0.8);
     group.add(handle);
@@ -373,6 +395,13 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     const frontWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
     frontWheel.rotation.y = Math.PI / 2;
     frontWheelGroup.add(frontWheel);
+    
+    // Blue rim accent
+    const rimGeometry = new THREE.TorusGeometry(0.2, 0.03, 8, 16);
+    const frontRim = new THREE.Mesh(rimGeometry, blueMaterial);
+    frontRim.rotation.y = Math.PI / 2;
+    frontWheelGroup.add(frontRim);
+    
     frontWheelGroup.position.set(0, 0.35, 1.0);
     frontWheelGroup.castShadow = true;
     group.add(frontWheelGroup);
@@ -383,49 +412,80 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     const rearWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
     rearWheel.rotation.y = Math.PI / 2;
     rearWheelGroup.add(rearWheel);
+    
+    const rearRim = new THREE.Mesh(rimGeometry, blueMaterial);
+    rearRim.rotation.y = Math.PI / 2;
+    rearWheelGroup.add(rearRim);
+    
     rearWheelGroup.position.set(0, 0.35, -0.8);
     rearWheelGroup.castShadow = true;
     group.add(rearWheelGroup);
 
-    // Delivery box with blue/yellow/white checkered pattern
+    // Delivery box - WHITE base with BLUE frame
     const boxGeometry = new THREE.BoxGeometry(1.1, 0.85, 0.85);
-    const boxMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0055aa,
-      metalness: 0.2,
-      roughness: 0.5,
-    });
-    const box = new THREE.Mesh(boxGeometry, boxMaterial);
+    const box = new THREE.Mesh(boxGeometry, whiteMaterial);
     box.position.set(0, 1.3, -0.6);
     box.castShadow = true;
     group.add(box);
 
-    // Box checkered pattern
-    const whiteMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
-      metalness: 0.1,
-      roughness: 0.4,
+    // Blue frame around box
+    const boxFramePositions = [
+      { geo: [1.15, 0.05, 0.05], pos: [0, 1.75, -0.17] },
+      { geo: [1.15, 0.05, 0.05], pos: [0, 1.75, -1.03] },
+      { geo: [1.15, 0.05, 0.05], pos: [0, 0.87, -0.17] },
+      { geo: [1.15, 0.05, 0.05], pos: [0, 0.87, -1.03] },
+      { geo: [0.05, 0.88, 0.05], pos: [0.55, 1.31, -0.17] },
+      { geo: [0.05, 0.88, 0.05], pos: [-0.55, 1.31, -0.17] },
+      { geo: [0.05, 0.88, 0.05], pos: [0.55, 1.31, -1.03] },
+      { geo: [0.05, 0.88, 0.05], pos: [-0.55, 1.31, -1.03] },
+    ];
+    
+    boxFramePositions.forEach(({ geo, pos }) => {
+      const frameBar = new THREE.Mesh(
+        new THREE.BoxGeometry(geo[0], geo[1], geo[2]),
+        blueMaterial
+      );
+      frameBar.position.set(pos[0], pos[1], pos[2]);
+      group.add(frameBar);
     });
 
+    // VERTICAL Yellow checkered pattern on front of box (white-blue-yellow)
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 3; j++) {
-        const isColored = (i + j) % 2 === 0;
-        const squareGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.02);
-        const square = new THREE.Mesh(squareGeometry, isColored ? accentMaterial : whiteMaterial);
-        square.position.set(-0.35 + i * 0.25, 1.15 + j * 0.25, -0.16);
+        const isYellow = (i + j) % 2 === 0;
+        const squareGeometry = new THREE.BoxGeometry(0.24, 0.24, 0.02);
+        const square = new THREE.Mesh(squareGeometry, isYellow ? yellowMaterial : blueMaterial);
+        square.position.set(-0.36 + i * 0.24, 1.06 + j * 0.24, -0.16);
         group.add(square);
       }
     }
 
-    // Box lid
-    const lidGeometry = new THREE.BoxGeometry(1.15, 0.1, 0.9);
-    const lidMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffd700,
-      emissive: 0xffaa00,
-      emissiveIntensity: 0.3,
+    // Yellow checkered pattern on sides (vertical)
+    [-0.56, 0.56].forEach((xPos, sideIdx) => {
+      for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+          const isYellow = (i + j + sideIdx) % 2 === 0;
+          const squareGeometry = new THREE.BoxGeometry(0.02, 0.24, 0.24);
+          const square = new THREE.Mesh(squareGeometry, isYellow ? yellowMaterial : blueMaterial);
+          square.position.set(xPos, 1.06 + j * 0.24, -0.36 - i * 0.24);
+          group.add(square);
+        }
+      }
     });
-    const lid = new THREE.Mesh(lidGeometry, lidMaterial);
+
+    // Box lid (blue with yellow accent)
+    const lidGeometry = new THREE.BoxGeometry(1.15, 0.1, 0.9);
+    const lid = new THREE.Mesh(lidGeometry, blueMaterial);
     lid.position.set(0, 1.78, -0.6);
     group.add(lid);
+
+    // Yellow stripe on lid
+    const lidStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(1.0, 0.02, 0.15),
+      yellowMaterial
+    );
+    lidStripe.position.set(0, 1.84, -0.6);
+    group.add(lidStripe);
 
     // Warm ambient light
     const foodLight = new THREE.PointLight(0xff8844, 5, 20);

@@ -32,8 +32,8 @@ const Index = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden bg-background">
       {/* SEO */}
-      <title>Osječki Taxi - Taxi & Food Delivery | Premium Cinematic Experience</title>
-      <meta name="description" content="Experience the future of transportation and food delivery with Osječki Taxi. Premium taxi service and fast food delivery in one seamless platform." />
+      <title>Osječki Taxi - Taxi & Dostava Hrane | Premium Kinematsko Iskustvo 2026</title>
+      <meta name="description" content="Doživite budućnost prijevoza i dostave hrane s Osječkim Taxijem. Premium taxi usluga i brza dostava hrane u jednoj platformi." />
       
       {/* 3D Scene */}
       <CinematicScene 
@@ -45,6 +45,7 @@ const Index = () => {
       <UIOverlay 
         isIntroComplete={isIntroComplete}
         hoveredWorld={hoveredWorld}
+        onSelectWorld={handleWorldSelect}
       />
     </div>
   );
