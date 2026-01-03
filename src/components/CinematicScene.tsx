@@ -1062,6 +1062,185 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
     return ground;
   }, []);
 
+  // Create water surface with realistic reflections (Drava river)
+  const createWaterSurface = useCallback((isDay: boolean) => {
+    const group = new THREE.Group();
+    
+    // Main water geometry - positioned in front of the scene
+    const waterGeometry = new THREE.PlaneGeometry(120, 40, 100, 100);
+    
+    // Custom shader for realistic water with reflections
+    const waterMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        isDay: { value: isDay ? 1.0 : 0.0 },
+        waterColor: { value: isDay ? new THREE.Color(0x2a5a8a) : new THREE.Color(0x0a1525) },
+        reflectionColor: { value: isDay ? new THREE.Color(0x6699cc) : new THREE.Color(0x1a3a5a) },
+        lightColor1: { value: new THREE.Color(0x00d4ff) }, // Blue city lights
+        lightColor2: { value: new THREE.Color(0xff9955) }, // Orange city lights
+        lightColor3: { value: new THREE.Color(0xffffee) }, // White lights
+      },
+      vertexShader: `
+        uniform float time;
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        varying float vWaveHeight;
+        
+        void main() {
+          vUv = uv;
+          vec3 pos = position;
+          
+          // Multiple wave layers for realistic water movement
+          float wave1 = sin(pos.x * 0.3 + time * 0.5) * 0.15;
+          float wave2 = sin(pos.y * 0.2 + time * 0.3) * 0.1;
+          float wave3 = sin((pos.x + pos.y) * 0.15 + time * 0.7) * 0.08;
+          float ripple = sin(length(pos.xy) * 0.5 - time * 0.8) * 0.05;
+          
+          pos.z += wave1 + wave2 + wave3 + ripple;
+          vWaveHeight = wave1 + wave2 + wave3 + ripple;
+          
+          vPosition = pos;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float isDay;
+        uniform vec3 waterColor;
+        uniform vec3 reflectionColor;
+        uniform vec3 lightColor1;
+        uniform vec3 lightColor2;
+        uniform vec3 lightColor3;
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        varying float vWaveHeight;
+        
+        // Simplex noise function for more natural patterns
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+        
+        float snoise(vec2 v) {
+          const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                   -0.577350269189626, 0.024390243902439);
+          vec2 i  = floor(v + dot(v, C.yy));
+          vec2 x0 = v -   i + dot(i, C.xx);
+          vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+          vec4 x12 = x0.xyxy + C.xxzz;
+          x12.xy -= i1;
+          i = mod289(i);
+          vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+          vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+          m = m*m; m = m*m;
+          vec3 x = 2.0 * fract(p * C.www) - 1.0;
+          vec3 h = abs(x) - 0.5;
+          vec3 ox = floor(x + 0.5);
+          vec3 a0 = x - ox;
+          m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+          vec3 g;
+          g.x = a0.x * x0.x + h.x * x0.y;
+          g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+          return 130.0 * dot(m, g);
+        }
+        
+        void main() {
+          // Base water color with depth
+          float depth = smoothstep(0.0, 1.0, vUv.y);
+          vec3 baseColor = mix(waterColor, reflectionColor, depth * 0.5);
+          
+          // Dynamic water surface patterns
+          float noise1 = snoise(vUv * 8.0 + time * 0.2) * 0.5 + 0.5;
+          float noise2 = snoise(vUv * 15.0 - time * 0.15) * 0.5 + 0.5;
+          float waterPattern = noise1 * 0.6 + noise2 * 0.4;
+          
+          // City light reflections - create vertical streaks
+          float lightStreak1 = smoothstep(0.3, 0.0, abs(sin(vUv.x * 25.0 + noise1 * 2.0)));
+          float lightStreak2 = smoothstep(0.25, 0.0, abs(sin(vUv.x * 18.0 + 1.5 + noise2 * 1.5)));
+          float lightStreak3 = smoothstep(0.2, 0.0, abs(sin(vUv.x * 30.0 + 3.0 + noise1 * 1.8)));
+          
+          // Reflections fade towards bottom (further from buildings)
+          float reflectionFade = smoothstep(1.0, 0.2, vUv.y);
+          
+          // Wave distortion on reflections
+          float waveDistort = sin(vUv.x * 20.0 + time * 2.0 + vWaveHeight * 10.0) * 0.3 + 0.7;
+          
+          // Combine light reflections
+          vec3 lightReflection1 = lightColor1 * lightStreak1 * reflectionFade * waveDistort * (1.0 - isDay * 0.6);
+          vec3 lightReflection2 = lightColor2 * lightStreak2 * reflectionFade * waveDistort * (1.0 - isDay * 0.6);
+          vec3 lightReflection3 = lightColor3 * lightStreak3 * reflectionFade * waveDistort * 0.5 * (1.0 - isDay * 0.5);
+          
+          // Shimmer effect on wave peaks
+          float shimmer = smoothstep(0.1, 0.2, vWaveHeight) * waterPattern * (1.0 - isDay * 0.4);
+          vec3 shimmerColor = mix(lightColor1, lightColor3, sin(time + vUv.x * 10.0) * 0.5 + 0.5) * shimmer * 0.3;
+          
+          // Fresnel-like edge effect
+          float fresnel = pow(1.0 - depth, 2.0) * 0.15;
+          
+          // Combine all elements
+          vec3 finalColor = baseColor * (0.6 + waterPattern * 0.4);
+          finalColor += lightReflection1 * 0.7;
+          finalColor += lightReflection2 * 0.6;
+          finalColor += lightReflection3 * 0.4;
+          finalColor += shimmerColor;
+          finalColor += reflectionColor * fresnel;
+          
+          // Subtle transparency at edges
+          float alpha = 0.85 + waterPattern * 0.15;
+          
+          gl_FragColor = vec4(finalColor, alpha);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+    });
+    
+    const water = new THREE.Mesh(waterGeometry, waterMaterial);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(0, -0.5, 35); // Position in front of scene (where river would be)
+    water.name = 'waterSurface';
+    group.add(water);
+    
+    // Add subtle fog/mist over water for atmosphere
+    const mistGeometry = new THREE.PlaneGeometry(120, 30);
+    const mistMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        isDay: { value: isDay ? 1.0 : 0.0 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        uniform float isDay;
+        varying vec2 vUv;
+        
+        void main() {
+          float noise = sin(vUv.x * 10.0 + time * 0.3) * sin(vUv.y * 8.0 + time * 0.2) * 0.5 + 0.5;
+          float fade = smoothstep(0.0, 0.5, vUv.y) * smoothstep(1.0, 0.5, vUv.y);
+          float alpha = noise * fade * (isDay > 0.5 ? 0.05 : 0.12);
+          vec3 mistColor = isDay > 0.5 ? vec3(0.7, 0.8, 0.9) : vec3(0.1, 0.15, 0.25);
+          gl_FragColor = vec4(mistColor, alpha);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    
+    const mist = new THREE.Mesh(mistGeometry, mistMaterial);
+    mist.rotation.x = -Math.PI / 2.5;
+    mist.position.set(0, 1.5, 40);
+    mist.name = 'waterMist';
+    group.add(mist);
+    
+    return group;
+  }, []);
+
   // Create asphalt road
   const createRoad = useCallback(() => {
     const group = new THREE.Group();
@@ -1265,6 +1444,10 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
 
     const rightBuildings = createBuildings('right', isDay);
     scene.add(rightBuildings);
+    
+    // Water surface with reflections (Drava river)
+    const waterSurface = createWaterSurface(isDay);
+    scene.add(waterSurface);
 
     // Taxi - Create placeholder group and load GLTF model
     const taxiPlaceholder = new THREE.Group();
@@ -1506,6 +1689,24 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
       if (core) {
         const scale = 1 + Math.sin(time * 2.5) * 0.15;
         core.scale.setScalar(scale);
+      }
+      
+      // Water surface shader update
+      const waterMesh = waterSurface.children.find(c => c.name === 'waterSurface') as THREE.Mesh;
+      if (waterMesh && (waterMesh as THREE.Mesh).material) {
+        const mat = (waterMesh as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (mat.uniforms) {
+          mat.uniforms.time.value = time;
+        }
+      }
+      
+      // Water mist shader update
+      const mistMesh = waterSurface.children.find(c => c.name === 'waterMist') as THREE.Mesh;
+      if (mistMesh && (mistMesh as THREE.Mesh).material) {
+        const mat = (mistMesh as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (mat.uniforms) {
+          mat.uniforms.time.value = time;
+        }
       }
 
       // Taxi idle animation
