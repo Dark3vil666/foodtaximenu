@@ -5,6 +5,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import gsap from 'gsap';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 interface CinematicSceneProps {
   onWorldSelect: (world: 'taxi' | 'food' | null) => void;
@@ -36,265 +37,28 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   const [isWarpAnimating, setIsWarpAnimating] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
 
-  // Create taxi model with blue/yellow/white livery
-  const createTaxiModel = useCallback(() => {
-    const group = new THREE.Group();
-    
-    // Car body - main chassis (white base)
-    const bodyGeometry = new THREE.BoxGeometry(2.6, 0.9, 5);
-    const bodyMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xf8f8f8,
-      metalness: 0.7,
-      roughness: 0.15,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
-      envMapIntensity: 2,
-    });
-    const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-    body.position.y = 0.65;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    group.add(body);
+const createTaxiModel = useCallback(() => {
+  return new Promise<THREE.Group>((resolve) => {
+    const loader = new GLTFLoader();
 
-    // Blue checkered stripe on sides
-    const checkerMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0066cc,
-      metalness: 0.5,
-      roughness: 0.3,
-      emissive: 0x001133,
-      emissiveIntensity: 0.2,
-    });
-    
-    const yellowMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffd700,
-      metalness: 0.6,
-      roughness: 0.2,
-      emissive: 0x332200,
-      emissiveIntensity: 0.3,
-    });
-
-    // Side checkered pattern
-    [-1.31, 1.31].forEach((x, sideIdx) => {
-      for (let i = 0; i < 8; i++) {
-        const isBlue = (i + sideIdx) % 2 === 0;
-        const checkerGeometry = new THREE.BoxGeometry(0.02, 0.3, 0.5);
-        const checker = new THREE.Mesh(checkerGeometry, isBlue ? checkerMaterial : yellowMaterial);
-        checker.position.set(x, 0.65, -1.5 + i * 0.5);
-        group.add(checker);
-      }
-    });
-
-    // Yellow diagonal stripes
-    [-1.32, 1.32].forEach((x) => {
-      const stripeGeometry = new THREE.BoxGeometry(0.02, 0.15, 2);
-      const stripe = new THREE.Mesh(stripeGeometry, yellowMaterial);
-      stripe.position.set(x, 0.35, 0);
-      stripe.rotation.z = 0.1;
-      group.add(stripe);
-    });
-
-    // Hood slope
-    const hoodGeometry = new THREE.BoxGeometry(2.4, 0.3, 1.5);
-    const hoodMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xf8f8f8,
-      metalness: 0.8,
-      roughness: 0.1,
-      clearcoat: 1,
-    });
-    const hood = new THREE.Mesh(hoodGeometry, hoodMaterial);
-    hood.position.set(0, 1.1, 1.8);
-    hood.rotation.x = -0.15;
-    hood.castShadow = true;
-    group.add(hood);
-
-    // Trunk
-    const trunkGeometry = new THREE.BoxGeometry(2.4, 0.3, 1.2);
-    const trunk = new THREE.Mesh(trunkGeometry, hoodMaterial);
-    trunk.position.set(0, 1.0, -2.0);
-    trunk.rotation.x = 0.1;
-    trunk.castShadow = true;
-    group.add(trunk);
-
-    // Cabin/Roof (blue)
-    const cabinGeometry = new THREE.BoxGeometry(2.3, 0.75, 2.8);
-    const cabinMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0055aa,
-      metalness: 0.7,
-      roughness: 0.2,
-      transparent: true,
-      opacity: 0.95,
-      clearcoat: 0.8,
-    });
-    const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
-    cabin.position.set(0, 1.45, -0.2);
-    cabin.castShadow = true;
-    group.add(cabin);
-
-    // Windows (glass effect)
-    const windowMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x001830,
-      metalness: 0.1,
-      roughness: 0,
-      transparent: true,
-      opacity: 0.4,
-      envMapIntensity: 3,
-    });
-
-    // Front windshield
-    const frontWindowGeometry = new THREE.PlaneGeometry(2.1, 0.7);
-    const frontWindow = new THREE.Mesh(frontWindowGeometry, windowMaterial);
-    frontWindow.position.set(0, 1.5, 1.25);
-    frontWindow.rotation.x = -0.4;
-    group.add(frontWindow);
-
-    // Rear window
-    const rearWindow = new THREE.Mesh(frontWindowGeometry, windowMaterial);
-    rearWindow.position.set(0, 1.5, -1.65);
-    rearWindow.rotation.x = 0.4;
-    group.add(rearWindow);
-
-    // Wheels with spinning capability
-    const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 32);
-    const wheelMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x111111,
-      metalness: 0.3,
-      roughness: 0.9,
-    });
-    
-    const wheelPositions = [
-      { x: -1.2, z: 1.6, name: 'wheel-fl' },
-      { x: 1.2, z: 1.6, name: 'wheel-fr' },
-      { x: -1.2, z: -1.6, name: 'wheel-rl' },
-      { x: 1.2, z: -1.6, name: 'wheel-rr' },
-    ];
-
-    wheelPositions.forEach(pos => {
-      const wheelGroup = new THREE.Group();
-      wheelGroup.name = pos.name;
-      
-      const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.castShadow = true;
-      wheelGroup.add(wheel);
-
-      // Chrome rim with blue accent
-      const rimGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.32, 16);
-      const rimMaterial = new THREE.MeshPhysicalMaterial({
-        color: 0x0066cc,
-        emissive: 0x0044aa,
-        emissiveIntensity: 0.5,
-        metalness: 1,
-        roughness: 0,
+    loader.load('/models/Auto.glb', (gltf) => {
+      const model = gltf.scene;
+      model.traverse((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
       });
-      const rim = new THREE.Mesh(rimGeometry, rimMaterial);
-      rim.rotation.z = Math.PI / 2;
-      wheelGroup.add(rim);
 
-      wheelGroup.position.set(pos.x, 0.4, pos.z);
-      group.add(wheelGroup);
+      model.scale.set(1.3, 1.3, 1.3);
+      model.position.set(-8, 0, 0);
+
+      taxiGroupRef.current = model;
+      resolve(model);
     });
+  });
+}, []);
 
-    // Headlights with intense glow
-    const headlightGeometry = new THREE.CircleGeometry(0.18, 32);
-    const headlightMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 3,
-      transparent: true,
-      opacity: 0.95,
-    });
-    
-    [-0.8, 0.8].forEach(x => {
-      const headlight = new THREE.Mesh(headlightGeometry, headlightMaterial);
-      headlight.position.set(x, 0.65, 2.51);
-      group.add(headlight);
-
-      // Headlight glow cone
-      const coneGeometry = new THREE.ConeGeometry(0.5, 3, 32, 1, true);
-      const coneMaterial = new THREE.MeshBasicMaterial({
-        color: 0x00d4ff,
-        transparent: true,
-        opacity: 0.15,
-        side: THREE.DoubleSide,
-      });
-      const cone = new THREE.Mesh(coneGeometry, coneMaterial);
-      cone.position.set(x, 0.65, 4);
-      cone.rotation.x = -Math.PI / 2;
-      group.add(cone);
-    });
-
-    // Taillights
-    const taillightGeometry = new THREE.BoxGeometry(0.5, 0.18, 0.05);
-    const taillightMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xff3333,
-      emissive: 0xff0000,
-      emissiveIntensity: 2,
-    });
-    
-    [-0.9, 0.9].forEach(x => {
-      const taillight = new THREE.Mesh(taillightGeometry, taillightMaterial);
-      taillight.position.set(x, 0.65, -2.51);
-      group.add(taillight);
-    });
-
-    // LED underglow strips (blue)
-    const underglowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x0066cc,
-      transparent: true,
-      opacity: 0.6,
-    });
-
-    [-1.35, 1.35].forEach(x => {
-      const sideStrip = new THREE.Mesh(
-        new THREE.BoxGeometry(0.05, 0.02, 4.5),
-        underglowMaterial
-      );
-      sideStrip.position.set(x, 0.2, 0);
-      group.add(sideStrip);
-    });
-
-    [-2.4, 2.4].forEach(z => {
-      const crossStrip = new THREE.Mesh(
-        new THREE.BoxGeometry(2.5, 0.02, 0.05),
-        underglowMaterial
-      );
-      crossStrip.position.set(0, 0.2, z);
-      group.add(crossStrip);
-    });
-
-    // Ground glow plane
-    const glowPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(3, 5.5),
-      new THREE.MeshBasicMaterial({
-        color: 0x0066cc,
-        transparent: true,
-        opacity: 0.25,
-        side: THREE.DoubleSide,
-      })
-    );
-    glowPlane.rotation.x = -Math.PI / 2;
-    glowPlane.position.y = 0.02;
-    group.add(glowPlane);
-
-    // Taxi sign on roof (yellow with blue text effect)
-    const signGeometry = new THREE.BoxGeometry(1, 0.3, 0.4);
-    const signMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffd700,
-      emissive: 0xffaa00,
-      emissiveIntensity: 2,
-    });
-    const sign = new THREE.Mesh(signGeometry, signMaterial);
-    sign.position.set(0, 1.95, -0.2);
-    group.add(sign);
-
-    // Main taxi light
-    const taxiLight = new THREE.PointLight(0x0066cc, 5, 20);
-    taxiLight.position.set(0, 3, 0);
-    group.add(taxiLight);
-    taxiLightRef.current = taxiLight;
-
-    return group;
-  }, []);
 
   // Create food delivery scooter with WHITE-BLUE livery and yellow checkered bag
   const createFoodDeliveryModel = useCallback(() => {
