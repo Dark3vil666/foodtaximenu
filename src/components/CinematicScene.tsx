@@ -64,7 +64,6 @@ const createTaxiModel = useCallback(() => {
 const createFoodDeliveryModel = useCallback(() => {
   return new Promise<THREE.Group>((resolve) => {
     const loader = new GLTFLoader();
-
     loader.load('/models/Motor.glb', (gltf) => {
       const model = gltf.scene;
 
@@ -75,7 +74,6 @@ const createFoodDeliveryModel = useCallback(() => {
         }
       });
 
-      // prilagodi po potrebi
       model.scale.set(1.6, 1.6, 1.6);
       model.position.set(8, 0, 0);
 
@@ -85,72 +83,6 @@ const createFoodDeliveryModel = useCallback(() => {
   });
 }, []);
 
-    // VERTICAL Yellow checkered pattern on front of box (white-blue-yellow)
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 3; j++) {
-        const isYellow = (i + j) % 2 === 0;
-        const squareGeometry = new THREE.BoxGeometry(0.24, 0.24, 0.02);
-        const square = new THREE.Mesh(squareGeometry, isYellow ? yellowMaterial : blueMaterial);
-        square.position.set(-0.36 + i * 0.24, 1.06 + j * 0.24, -0.16);
-        group.add(square);
-      }
-    }
-
-    // Yellow checkered pattern on sides (vertical)
-    [-0.56, 0.56].forEach((xPos, sideIdx) => {
-      for (let i = 0; i < 3; i++) {
-        for (let j = 0; j < 3; j++) {
-          const isYellow = (i + j + sideIdx) % 2 === 0;
-          const squareGeometry = new THREE.BoxGeometry(0.02, 0.24, 0.24);
-          const square = new THREE.Mesh(squareGeometry, isYellow ? yellowMaterial : blueMaterial);
-          square.position.set(xPos, 1.06 + j * 0.24, -0.36 - i * 0.24);
-          group.add(square);
-        }
-      }
-    });
-
-    // Box lid (blue with yellow accent)
-    const lidGeometry = new THREE.BoxGeometry(1.15, 0.1, 0.9);
-    const lid = new THREE.Mesh(lidGeometry, blueMaterial);
-    lid.position.set(0, 1.78, -0.6);
-    group.add(lid);
-
-    // Yellow stripe on lid
-    const lidStripe = new THREE.Mesh(
-      new THREE.BoxGeometry(1.0, 0.02, 0.15),
-      yellowMaterial
-    );
-    lidStripe.position.set(0, 1.84, -0.6);
-    group.add(lidStripe);
-
-    // Warm ambient light
-    const foodLight = new THREE.PointLight(0xff8844, 5, 20);
-    foodLight.position.set(0, 3, 0);
-    group.add(foodLight);
-    foodLightRef.current = foodLight;
-
-    // Ground glow for food
-    const warmGlow = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.5, 3),
-      new THREE.MeshBasicMaterial({
-        color: 0xff6b35,
-        transparent: true,
-        opacity: 0.2,
-        side: THREE.DoubleSide,
-      })
-    );
-    warmGlow.rotation.x = -Math.PI / 2;
-    warmGlow.position.y = 0.02;
-    group.add(warmGlow);
-
-    // Steam emitter marker
-    const steamEmitter = new THREE.Object3D();
-    steamEmitter.position.set(0, 1.9, -0.6);
-    steamEmitter.name = 'steamEmitter';
-    group.add(steamEmitter);
-
-    return group;
-  }, []);
 
   // Create portal that rises from ground
   const createPortal = useCallback(() => {
@@ -604,18 +536,21 @@ const createFoodDeliveryModel = useCallback(() => {
     scene.add(rightBuildings);
 
     // Taxi
-    const taxi = createTaxiModel();
-    taxi.position.set(-8, 0, 0);
-    taxi.scale.setScalar(1.3);
-    scene.add(taxi);
-    taxiGroupRef.current = taxi;
+createTaxiModel().then((taxi) => {
+  taxi.position.set(-8, 0, 0);
+  taxi.scale.setScalar(1.3);
+  scene.add(taxi);
+  taxiGroupRef.current = taxi;
+});
 
     // Food delivery
-    const food = createFoodDeliveryModel();
-    food.position.set(8, 0, 0);
-    food.scale.setScalar(1.6);
-    scene.add(food);
-    foodGroupRef.current = food;
+createFoodDeliveryModel().then((food) => {
+  food.position.set(8, 0, 0);
+  food.scale.setScalar(1.6);
+  scene.add(food);
+  foodGroupRef.current = food;
+});
+
 
     // Portal (hidden initially)
     const portal = createPortal();
