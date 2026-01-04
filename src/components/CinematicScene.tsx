@@ -60,158 +60,30 @@ const createTaxiModel = useCallback(() => {
 }, []);
 
 
-  // Create food delivery scooter with WHITE-BLUE livery and yellow checkered bag
-  const createFoodDeliveryModel = useCallback(() => {
-    const group = new THREE.Group();
 
-    // WHITE material for scooter body
-    const whiteMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
-      metalness: 0.7,
-      roughness: 0.15,
-      clearcoat: 1,
-      clearcoatRoughness: 0.05,
+const createFoodDeliveryModel = useCallback(() => {
+  return new Promise<THREE.Group>((resolve) => {
+    const loader = new GLTFLoader();
+
+    loader.load('/models/Motor.glb', (gltf) => {
+      const model = gltf.scene;
+
+      model.traverse((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      // prilagodi po potrebi
+      model.scale.set(1.6, 1.6, 1.6);
+      model.position.set(8, 0, 0);
+
+      foodGroupRef.current = model;
+      resolve(model);
     });
-
-    // BLUE accent material
-    const blueMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0066cc,
-      metalness: 0.6,
-      roughness: 0.2,
-      emissive: 0x001133,
-      emissiveIntensity: 0.3,
-    });
-
-    // YELLOW material for checkered pattern
-    const yellowMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xffd700,
-      metalness: 0.5,
-      roughness: 0.2,
-      emissive: 0x332200,
-      emissiveIntensity: 0.3,
-    });
-
-    // Scooter body frame (WHITE base)
-    const frameGeometry = new THREE.BoxGeometry(0.6, 0.5, 2.2);
-    const frame = new THREE.Mesh(frameGeometry, whiteMaterial);
-    frame.position.y = 0.5;
-    frame.castShadow = true;
-    frame.receiveShadow = true;
-    group.add(frame);
-
-    // Blue accents on frame sides
-    [-0.31, 0.31].forEach(x => {
-      const accent = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.4, 1.8),
-        blueMaterial
-      );
-      accent.position.set(x, 0.5, 0);
-      group.add(accent);
-    });
-
-    // Blue stripe on top of frame
-    const topStripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.02, 1.6),
-      blueMaterial
-    );
-    topStripe.position.set(0, 0.76, 0);
-    group.add(topStripe);
-
-    // Seat (dark)
-    const seatGeometry = new THREE.BoxGeometry(0.5, 0.15, 0.8);
-    const seatMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x1a1a2e,
-      metalness: 0.3,
-      roughness: 0.8,
-    });
-    const seat = new THREE.Mesh(seatGeometry, seatMaterial);
-    seat.position.set(0, 0.85, -0.3);
-    group.add(seat);
-
-    // Handlebar stem (chrome with blue tip)
-    const stemGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
-    const metalMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x888888,
-      metalness: 0.95,
-      roughness: 0.1,
-    });
-    const stem = new THREE.Mesh(stemGeometry, metalMaterial);
-    stem.position.set(0, 1.0, 0.8);
-    group.add(stem);
-
-    // Handlebar
-    const handleGeometry = new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8);
-    const handle = new THREE.Mesh(handleGeometry, blueMaterial);
-    handle.rotation.z = Math.PI / 2;
-    handle.position.set(0, 1.3, 0.8);
-    group.add(handle);
-
-    // Front wheel with spinning capability
-    const wheelGeometry = new THREE.TorusGeometry(0.35, 0.1, 16, 32);
-    const wheelMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x111111,
-      metalness: 0.4,
-      roughness: 0.8,
-    });
-    
-    const frontWheelGroup = new THREE.Group();
-    frontWheelGroup.name = 'wheel-front';
-    const frontWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    frontWheel.rotation.y = Math.PI / 2;
-    frontWheelGroup.add(frontWheel);
-    
-    // Blue rim accent
-    const rimGeometry = new THREE.TorusGeometry(0.2, 0.03, 8, 16);
-    const frontRim = new THREE.Mesh(rimGeometry, blueMaterial);
-    frontRim.rotation.y = Math.PI / 2;
-    frontWheelGroup.add(frontRim);
-    
-    frontWheelGroup.position.set(0, 0.35, 1.0);
-    frontWheelGroup.castShadow = true;
-    group.add(frontWheelGroup);
-
-    // Rear wheel
-    const rearWheelGroup = new THREE.Group();
-    rearWheelGroup.name = 'wheel-rear';
-    const rearWheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-    rearWheel.rotation.y = Math.PI / 2;
-    rearWheelGroup.add(rearWheel);
-    
-    const rearRim = new THREE.Mesh(rimGeometry, blueMaterial);
-    rearRim.rotation.y = Math.PI / 2;
-    rearWheelGroup.add(rearRim);
-    
-    rearWheelGroup.position.set(0, 0.35, -0.8);
-    rearWheelGroup.castShadow = true;
-    group.add(rearWheelGroup);
-
-    // Delivery box - WHITE base with BLUE frame
-    const boxGeometry = new THREE.BoxGeometry(1.1, 0.85, 0.85);
-    const box = new THREE.Mesh(boxGeometry, whiteMaterial);
-    box.position.set(0, 1.3, -0.6);
-    box.castShadow = true;
-    group.add(box);
-
-    // Blue frame around box
-    const boxFramePositions = [
-      { geo: [1.15, 0.05, 0.05], pos: [0, 1.75, -0.17] },
-      { geo: [1.15, 0.05, 0.05], pos: [0, 1.75, -1.03] },
-      { geo: [1.15, 0.05, 0.05], pos: [0, 0.87, -0.17] },
-      { geo: [1.15, 0.05, 0.05], pos: [0, 0.87, -1.03] },
-      { geo: [0.05, 0.88, 0.05], pos: [0.55, 1.31, -0.17] },
-      { geo: [0.05, 0.88, 0.05], pos: [-0.55, 1.31, -0.17] },
-      { geo: [0.05, 0.88, 0.05], pos: [0.55, 1.31, -1.03] },
-      { geo: [0.05, 0.88, 0.05], pos: [-0.55, 1.31, -1.03] },
-    ];
-    
-    boxFramePositions.forEach(({ geo, pos }) => {
-      const frameBar = new THREE.Mesh(
-        new THREE.BoxGeometry(geo[0], geo[1], geo[2]),
-        blueMaterial
-      );
-      frameBar.position.set(pos[0], pos[1], pos[2]);
-      group.add(frameBar);
-    });
+  });
+}, []);
 
     // VERTICAL Yellow checkered pattern on front of box (white-blue-yellow)
     for (let i = 0; i < 4; i++) {
