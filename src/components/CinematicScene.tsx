@@ -644,9 +644,16 @@ createFoodDeliveryModel().then((food) => {
       }
 
       // Taxi idle animation - floating and wheel rotation
-      if (taxi) {
-        taxi.position.y = Math.sin(time * 1.5) * 0.05;
-        
+if (taxiGroupRef.current) {
+  taxiGroupRef.current.position.y = Math.sin(time * 1.5) * 0.05;
+
+  taxiGroupRef.current.children.forEach(child => {
+    if (child.name && child.name.startsWith('wheel-')) {
+      child.rotation.x += 0.01;
+    }
+  });
+}
+
         // Wheel rotation
         taxi.children.forEach(child => {
           if (child.name && child.name.startsWith('wheel-')) {
@@ -656,9 +663,16 @@ createFoodDeliveryModel().then((food) => {
       }
 
       // Food delivery idle animation
-      if (food) {
-        food.position.y = Math.sin(time * 1.5 + 1) * 0.04;
-        
+if (foodGroupRef.current) {
+  foodGroupRef.current.position.y = Math.sin(time * 1.5 + 1) * 0.04;
+
+  foodGroupRef.current.children.forEach(child => {
+    if (child.name && child.name.startsWith('wheel-')) {
+      child.rotation.x += 0.008;
+    }
+  });
+}
+
         // Wheel rotation
         food.children.forEach(child => {
           if (child.name && child.name.startsWith('wheel-')) {
