@@ -29,13 +29,14 @@ const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroC
   const rainParticlesRef = useRef<THREE.Points | null>(null);
   const steamParticlesRef = useRef<THREE.Points | null>(null);
   const portalParticlesRef = useRef<THREE.Points | null>(null);
-  const taxiLightRef = useRef<THREE.PointLight | null>(null);
-  const foodLightRef = useRef<THREE.PointLight | null>(null);
   const timeRef = useRef(0);
   
   const [sceneState, setSceneState] = useState<SceneState>('intro');
   const [isWarpAnimating, setIsWarpAnimating] = useState(false);
   const [introComplete, setIntroComplete] = useState(false);
+  
+const taxiBaseY = useRef(0);
+const foodBaseY = useRef(0);
 
 const createTaxiModel = useCallback(() => {
   return new Promise<THREE.Group>((resolve) => {
@@ -43,46 +44,71 @@ const createTaxiModel = useCallback(() => {
 
     loader.load('/models/Auto.glb', (gltf) => {
       const model = gltf.scene;
-      model.traverse((child: any) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+
+      // reset transforms
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+      model.scale.setScalar(1);
+
+      // center & autoscale
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      model.position.sub(center);
+
+      const scaleFactor = 5 / size.length();
+      model.scale.multiplyScalar(scaleFactor);
+
+      model.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
         }
       });
 
-      model.scale.set(1.3, 1.3, 1.3);
-      model.position.set(-8, 0, 0);
-
-      taxiGroupRef.current = model;
+      console.log("🚕 TAXI READY");
       resolve(model);
     });
   });
 }, []);
-
-
 
 const createFoodDeliveryModel = useCallback(() => {
   return new Promise<THREE.Group>((resolve) => {
     const loader = new GLTFLoader();
+
     loader.load('/models/Motor.glb', (gltf) => {
       const model = gltf.scene;
 
-      model.traverse((child: any) => {
-        if (child.isMesh) {
-          child.castShadow = true;
-          child.receiveShadow = true;
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+      model.scale.setScalar(1);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+
+      model.position.sub(center);
+
+      const scaleFactor = 5 / size.length();
+      model.scale.multiplyScalar(scaleFactor);
+
+      model.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
         }
       });
 
-      model.scale.set(1.6, 1.6, 1.6);
-      model.position.set(8, 0, 0);
-
-      foodGroupRef.current = model;
+      console.log("🛵 MOTOR READY");
       resolve(model);
     });
   });
 }, []);
-
 
   // Create portal that rises from ground
   const createPortal = useCallback(() => {
@@ -507,6 +533,12 @@ const createFoodDeliveryModel = useCallback(() => {
     // Ambient lighting
     const ambientLight = new THREE.AmbientLight(0x0a1020, 0.4);
     scene.add(ambientLight);
+	scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+
+const dir = new THREE.DirectionalLight(0xffffff, 2);
+dir.position.set(5, 10, 5);
+scene.add(dir);
+
 
     // Directional light
     const directionalLight = new THREE.DirectionalLight(0x4488ff, 0.4);
@@ -536,17 +568,41 @@ const createFoodDeliveryModel = useCallback(() => {
     scene.add(rightBuildings);
 
     // Taxi
+// Taxi
 createTaxiModel().then((taxi) => {
-  taxi.position.set(-8, 0, 0);
-  taxi.scale.setScalar(1.3);
+
+  // TAKSI JE IZNAD PORTALA KOJI ĆE BITI ISPOD NJEGA
+  taxi.position.set(-8, 1.1, 0);
+
+  // lagano pod kutem prema kameri (LIJEVA STRANA)
+  taxi.rotation.set(0, Math.PI * 0.28, 0);
+
+  // realna veličina
+  taxi.scale.setScalar(2.1);
+
+  taxiBaseY.current = taxi.position.y;
+
   scene.add(taxi);
   taxiGroupRef.current = taxi;
 });
 
+
+
     // Food delivery
+// Food delivery MOTOR
 createFoodDeliveryModel().then((food) => {
-  food.position.set(8, 0, 0);
-  food.scale.setScalar(1.6);
+
+  // MOTOR IZNAD PORTALA
+  food.position.set(8, 1.05, 0);
+
+  // MOTOR RAVNO — NEMA ROTACIJE
+  food.rotation.set(0, 0, 0);
+
+  // malo manji od auta — ali vidljiv
+  food.scale.setScalar(1.65);
+
+  foodBaseY.current = food.position.y;
+
   scene.add(food);
   foodGroupRef.current = food;
 });
@@ -574,44 +630,14 @@ createFoodDeliveryModel().then((food) => {
     scene.add(portalParticles);
     portalParticlesRef.current = portalParticles;
 
-    // Start with screen black
-    renderer.domElement.style.opacity = '0';
+
 
     // CINEMATIC INTRO ANIMATION (no camera movement - just fade in)
-    const introTimeline = gsap.timeline({
-      onComplete: () => {
-        setIntroComplete(true);
-        setSceneState('idle');
-        onIntroComplete();
-      },
-    });
+// nema timelinea – intro je odmah gotov
+setIntroComplete(true);
+setSceneState('idle');
+onIntroComplete();
 
-    introTimeline
-      .to(renderer.domElement, { 
-        opacity: 1, 
-        duration: 2, 
-        ease: 'power2.out' 
-      })
-      // Pulse taxi lights
-      .to(taxiLightRef.current!, { 
-        intensity: 10, 
-        duration: 0.8, 
-        ease: 'power2.out' 
-      }, 1)
-      .to(taxiLightRef.current!, { 
-        intensity: 5, 
-        duration: 0.5 
-      }, 1.8)
-      // Pulse food lights
-      .to(foodLightRef.current!, { 
-        intensity: 10, 
-        duration: 0.8, 
-        ease: 'power2.out' 
-      }, 1.5)
-      .to(foodLightRef.current!, { 
-        intensity: 5, 
-        duration: 0.5 
-      }, 2.3);
 
     // Animation loop
     const animate = () => {
@@ -643,9 +669,10 @@ createFoodDeliveryModel().then((food) => {
         }
       }
 
-// Taxi idle animation - floating and wheel rotation
+// Taxi idle animation
 if (taxiGroupRef.current) {
-  taxiGroupRef.current.position.y = Math.sin(time * 1.5) * 0.05;
+  taxiGroupRef.current.position.y =
+    taxiBaseY.current + Math.sin(time * 1.5) * 0.05;
 
   taxiGroupRef.current.children.forEach(child => {
     if (child.name && child.name.startsWith('wheel-')) {
@@ -654,9 +681,10 @@ if (taxiGroupRef.current) {
   });
 }
 
-// Food delivery idle animation - floating and wheel rotation
+// Food delivery idle animation
 if (foodGroupRef.current) {
-  foodGroupRef.current.position.y = Math.sin(time * 1.5 + 1) * 0.04;
+  foodGroupRef.current.position.y =
+    foodBaseY.current + Math.sin(time * 1.5 + 1) * 0.04;
 
   foodGroupRef.current.children.forEach(child => {
     if (child.name && child.name.startsWith('wheel-')) {
@@ -745,7 +773,7 @@ if (foodGroupRef.current) {
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
       }
-      introTimeline.kill();
+      
       if (containerRef.current && renderer.domElement.parentElement === containerRef.current) {
         containerRef.current.removeChild(renderer.domElement);
       }
