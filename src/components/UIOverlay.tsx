@@ -33,7 +33,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ isIntroComplete, hoveredWorld, is
         }`}
         style={{ transitionDelay: '1s' }}
       >
-        <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-wider mb-4 text-gradient-neon">
+        <h1 className="font-display text-4xl md:text-5xl lg:text-3xl font-bold tracking-wider mb-4 text-gradient-neon">
           BUDUĆNOST JE STIGLA
         </h1>
         <p className="font-body text-lg md:text-xl text-muted-foreground tracking-[0.15em] uppercase mb-2">
