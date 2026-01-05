@@ -12,157 +12,544 @@ interface CinematicSceneProps {
   onIntroComplete: () => void;
 }
 
-type SceneState = 'intro' | 'idle' | 'warp-taxi' | 'warp-food';
-
-const CinematicScene: React.FC<CinematicSceneProps> = ({ onWorldSelect, onIntroComplete }) => {
+const CinematicScene: React.FC<CinematicSceneProps> = ({
+  onWorldSelect,
+  onIntroComplete,
+}) => {
   const navigate = useNavigate();
+
   const containerRef = useRef<HTMLDivElement>(null);
+
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const composerRef = useRef<EffectComposer | null>(null);
   const bloomPassRef = useRef<UnrealBloomPass | null>(null);
   const animationIdRef = useRef<number | null>(null);
+
   const taxiGroupRef = useRef<THREE.Group | null>(null);
   const foodGroupRef = useRef<THREE.Group | null>(null);
   const portalRef = useRef<THREE.Group | null>(null);
-  const rainParticlesRef = useRef<THREE.Points | null>(null);
-  const steamParticlesRef = useRef<THREE.Points | null>(null);
-  const portalParticlesRef = useRef<THREE.Points | null>(null);
+
   const timeRef = useRef(0);
-  
-  const [sceneState, setSceneState] = useState<SceneState>('intro');
-  const [isWarpAnimating, setIsWarpAnimating] = useState(false);
+
   const [introComplete, setIntroComplete] = useState(false);
-  
-const taxiBaseY = useRef(0);
-const foodBaseY = useRef(0);
 
-const createTaxiModel = useCallback(() => {
-  return new Promise<THREE.Group>((resolve) => {
-    const loader = new GLTFLoader();
+  const isWarpAnimatingRef = useRef(false);
+  const warpVehicleRef = useRef<THREE.Object3D | null>(null);
 
-    loader.load('/models/Auto.glb', (gltf) => {
-      const model = gltf.scene;
+  const taxiBaseY = useRef(0);
+  const foodBaseY = useRef(0);
 
-      // reset transforms
-      model.position.set(0, 0, 0);
-      model.rotation.set(0, 0, 0);
-      model.scale.setScalar(1);
+  const trafficLightMaterialsRef = useRef<
+    {
+      red: THREE.MeshStandardMaterial;
+      yellow: THREE.MeshStandardMaterial;
+      green: THREE.MeshStandardMaterial;
+    }[]
+  >([]);
 
-      // center & autoscale
-      const box = new THREE.Box3().setFromObject(model);
-      const size = new THREE.Vector3();
+  // ------------------------------------------------
+  //  TUNING (bez preklapanja / pregledno)
+  // ------------------------------------------------
+  const TAXI_X = -6.2;
+  const MOTOR_X = 6.2;
+  const VEHICLES_Z = -6.8;
+
+  // Motor ravno prema kameri (u većini GLTF slučajeva treba Math.PI)
+  const MOTOR_YAW = Math.PI;
+
+  // Taxi 3/4 (lijevi bok)
+  const TAXI_YAW = THREE.MathUtils.degToRad(32);
+
+  // ------------------------------------------------
+  //  HELPERS
+  // ------------------------------------------------
+  const normalizeScaleAndGround = useCallback(
+    (model: THREE.Object3D, targetDiagonal: number) => {
+      model.updateWorldMatrix(true, true);
+      const box0 = new THREE.Box3().setFromObject(model);
       const center = new THREE.Vector3();
-      box.getSize(size);
-      box.getCenter(center);
-
+      box0.getCenter(center);
       model.position.sub(center);
 
-      const scaleFactor = 5 / size.length();
-      model.scale.multiplyScalar(scaleFactor);
-
-      model.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) {
-          o.castShadow = true;
-          o.receiveShadow = true;
-        }
-      });
-
-      console.log("🚕 TAXI READY");
-      resolve(model);
-    });
-  });
-}, []);
-
-const createFoodDeliveryModel = useCallback(() => {
-  return new Promise<THREE.Group>((resolve) => {
-    const loader = new GLTFLoader();
-
-    loader.load('/models/Motor.glb', (gltf) => {
-      const model = gltf.scene;
-
-      model.position.set(0, 0, 0);
-      model.rotation.set(0, 0, 0);
-      model.scale.setScalar(1);
-
-      const box = new THREE.Box3().setFromObject(model);
+      model.updateWorldMatrix(true, true);
+      const box1 = new THREE.Box3().setFromObject(model);
       const size = new THREE.Vector3();
-      const center = new THREE.Vector3();
-      box.getSize(size);
-      box.getCenter(center);
+      box1.getSize(size);
+      const len = size.length() || 1;
 
-      model.position.sub(center);
-
-      const scaleFactor = 5 / size.length();
+      const scaleFactor = targetDiagonal / len;
       model.scale.multiplyScalar(scaleFactor);
 
-      model.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) {
-          o.castShadow = true;
-          o.receiveShadow = true;
-        }
-      });
+      model.updateWorldMatrix(true, true);
+      const box2 = new THREE.Box3().setFromObject(model);
+      const minY = box2.min.y;
+      model.position.y -= minY;
 
-      console.log("🛵 MOTOR READY");
-      resolve(model);
+      model.position.y += 0.02;
+    },
+    [],
+  );
+
+  const getObjectSize = useCallback((obj: THREE.Object3D) => {
+    obj.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return size;
+  }, []);
+
+  // ------------------------------------------------
+  //  MODELI (taxi & motor)
+  // ------------------------------------------------
+  const createTaxiModel = useCallback(() => {
+    return new Promise<THREE.Group>((resolve) => {
+      const loader = new GLTFLoader();
+
+      loader.load(
+        '/models/Auto.glb',
+        (gltf) => {
+          const model = gltf.scene;
+
+          model.position.set(0, 0, 0);
+          model.rotation.set(0, 0, 0);
+          model.scale.setScalar(1);
+
+          normalizeScaleAndGround(model, 12.7);
+
+          model.traverse((o) => {
+            if ((o as THREE.Mesh).isMesh) {
+              const mesh = o as THREE.Mesh;
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach((m) => {
+                  if ((m as any).metalness !== undefined)
+                    (m as any).metalness = Math.min(
+                      1,
+                      (m as any).metalness + 0.05,
+                    );
+                  if ((m as any).roughness !== undefined)
+                    (m as any).roughness = Math.max(
+                      0.15,
+                      (m as any).roughness - 0.05,
+                    );
+                });
+              } else {
+                const m = mesh.material as any;
+                if (m?.metalness !== undefined)
+                  m.metalness = Math.min(1, (m.metalness ?? 0.7) + 0.05);
+                if (m?.roughness !== undefined)
+                  m.roughness = Math.max(0.15, (m.roughness ?? 0.35) - 0.05);
+              }
+            }
+          });
+
+          resolve(model);
+        },
+        undefined,
+        () => resolve(new THREE.Group()),
+      );
     });
-  });
-}, []);
+  }, [normalizeScaleAndGround]);
 
-  // Create portal that rises from ground
+  const createFoodDeliveryModel = useCallback(() => {
+    return new Promise<THREE.Group>((resolve) => {
+      const loader = new GLTFLoader();
+
+      loader.load(
+        '/models/Motor.glb',
+        (gltf) => {
+          const model = gltf.scene;
+
+          model.position.set(0, 0, 0);
+          model.rotation.set(0, 0, 0);
+          model.scale.setScalar(1);
+
+          normalizeScaleAndGround(model, 10.6);
+
+          model.traverse((o) => {
+            if ((o as THREE.Mesh).isMesh) {
+              const mesh = o as THREE.Mesh;
+              mesh.castShadow = true;
+              mesh.receiveShadow = true;
+
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach((m) => {
+                  if ((m as any).metalness !== undefined)
+                    (m as any).metalness = Math.min(
+                      1,
+                      (m as any).metalness + 0.05,
+                    );
+                  if ((m as any).roughness !== undefined)
+                    (m as any).roughness = Math.max(
+                      0.15,
+                      (m as any).roughness - 0.05,
+                    );
+                });
+              } else {
+                const m = mesh.material as any;
+                if (m?.metalness !== undefined)
+                  m.metalness = Math.min(1, (m.metalness ?? 0.7) + 0.05);
+                if (m?.roughness !== undefined)
+                  m.roughness = Math.max(0.15, (m.roughness ?? 0.35) - 0.05);
+              }
+            }
+          });
+
+          resolve(model);
+        },
+        undefined,
+        () => resolve(new THREE.Group()),
+      );
+    });
+  }, [normalizeScaleAndGround]);
+
+  // ------------------------------------------------
+  //  SKY DOME
+  // ------------------------------------------------
+  const createSkyDome = useCallback(() => {
+    const geometry = new THREE.SphereGeometry(500, 64, 64);
+
+    const material = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x020515) },
+        bottomColor: { value: new THREE.Color(0x040c25) },
+        offset: { value: 20 },
+        exponent: { value: 0.9 },
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPosition;
+
+        float rand(vec2 co){
+          return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+        }
+
+        void main() {
+          float h = normalize( vWorldPosition + offset ).y;
+          vec3 sky = mix( bottomColor, topColor, max( pow( max(h, 0.0), exponent ), 0.0 ) );
+
+          float star = rand(vWorldPosition.xz * 0.02);
+          float threshold = 0.995;
+          float starMask = step(threshold, star);
+          vec3 starColor = vec3(1.0, 1.0, 1.0) * starMask;
+
+          gl_FragColor = vec4( sky + starColor, 1.0 );
+        }
+      `,
+    });
+
+    return new THREE.Mesh(geometry, material);
+  }, []);
+
+  // ------------------------------------------------
+  //  GROUND & ROAD
+  // ------------------------------------------------
+  const createGround = useCallback(() => {
+    const geometry = new THREE.PlaneGeometry(300, 300);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x05060a,
+      metalness: 0.4,
+      roughness: 0.85,
+    });
+
+    const ground = new THREE.Mesh(geometry, material);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = 0;
+    ground.receiveShadow = true;
+
+    return ground;
+  }, []);
+
+  const createRoad = useCallback(() => {
+    const group = new THREE.Group();
+
+    const roadGeometry = new THREE.PlaneGeometry(18, 90);
+    const roadMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0f1116,
+      metalness: 0.7,
+      roughness: 0.33,
+    });
+    const road = new THREE.Mesh(roadGeometry, roadMaterial);
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.02, -6);
+    road.receiveShadow = true;
+    group.add(road);
+
+    const stripeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x00eaff,
+      emissive: 0x00eaff,
+      emissiveIntensity: 1.75,
+    });
+
+    for (let i = -14; i <= 14; i++) {
+      const stripeGeo = new THREE.PlaneGeometry(0.34, 2.0);
+      const stripe = new THREE.Mesh(stripeGeo, stripeMaterial);
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set(0, 0.03, i * 3 - 6);
+      group.add(stripe);
+    }
+
+    return group;
+  }, []);
+
+  // ------------------------------------------------
+  //  CITY
+  // ------------------------------------------------
+  const createCity = useCallback(() => {
+    const group = new THREE.Group();
+
+    const leftMaterial = new THREE.MeshStandardMaterial({
+      color: 0x0b1628,
+      metalness: 0.7,
+      roughness: 0.35,
+    });
+    const rightMaterial = new THREE.MeshStandardMaterial({
+      color: 0x26100a,
+      metalness: 0.7,
+      roughness: 0.35,
+    });
+
+    const blueWindow = new THREE.MeshBasicMaterial({ color: 0x00eaff });
+    const orangeWindow = new THREE.MeshBasicMaterial({ color: 0xff8a3c });
+
+    const createBuildingRow = (
+      side: 'left' | 'right',
+      material: THREE.MeshStandardMaterial,
+      windowMat: THREE.MeshBasicMaterial,
+    ) => {
+      const xBase = side === 'left' ? -20 : 20;
+      for (let i = 0; i < 20; i++) {
+        const height = 6 + Math.random() * 24;
+        const width = 3 + Math.random() * 4;
+        const depth = 3 + Math.random() * 4;
+
+        const geom = new THREE.BoxGeometry(width, height, depth);
+        const building = new THREE.Mesh(geom, material);
+        const zPos = -34 + i * 3.3 + (Math.random() - 0.5) * 2;
+        const xOffset = (Math.random() - 0.5) * 4;
+
+        building.position.set(xBase + xOffset, height / 2, zPos);
+        building.castShadow = true;
+        building.receiveShadow = true;
+        group.add(building);
+
+        const rows = Math.floor(height / 2.4);
+        for (let r = 0; r < rows; r++) {
+          if (Math.random() < 0.35) continue;
+          const winGeo = new THREE.PlaneGeometry(0.7, 1.1);
+          const win = new THREE.Mesh(winGeo, windowMat);
+          const xSign = side === 'left' ? 1 : -1;
+          const x = building.position.x + xSign * (width / 2 + 0.02);
+          const y = 1.5 + r * 2.3;
+          const z = building.position.z + (Math.random() - 0.5) * (depth * 0.5);
+          win.position.set(x, y, z);
+          win.rotation.y = side === 'left' ? 0 : Math.PI;
+          group.add(win);
+        }
+      }
+    };
+
+    createBuildingRow('left', leftMaterial, blueWindow);
+    createBuildingRow('right', rightMaterial, orangeWindow);
+
+    return group;
+  }, []);
+
+  // ------------------------------------------------
+  //  ULIČNE LAMPE
+  // ------------------------------------------------
+  const createStreetLamps = useCallback(() => {
+    const group = new THREE.Group();
+
+    const poleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x151515,
+      metalness: 0.9,
+      roughness: 0.3,
+    });
+
+    const headMaterial = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      emissive: 0x66d1ff,
+      emissiveIntensity: 2.2,
+      metalness: 0.8,
+      roughness: 0.25,
+    });
+
+    const zPositions = [-30, -22, -14, -6, 2, 10, 18];
+
+    zPositions.forEach((z) => {
+      [-9.5, 9.5].forEach((xSide) => {
+        const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 4.2, 8);
+        const pole = new THREE.Mesh(poleGeo, poleMaterial);
+        pole.position.set(xSide, 2.1, z);
+        pole.castShadow = true;
+        group.add(pole);
+
+        const headGeo = new THREE.BoxGeometry(0.3, 0.35, 1.0);
+        const head = new THREE.Mesh(headGeo, headMaterial);
+        const dir = xSide > 0 ? -1 : 1;
+        head.position.set(xSide + 0.35 * dir, 4, z);
+        head.rotation.y = dir === 1 ? Math.PI / 2 : -Math.PI / 2;
+        head.castShadow = true;
+        group.add(head);
+
+        const light = new THREE.PointLight(0x66ccff, 1.7, 14);
+        light.position.copy(head.position);
+        light.position.y += 0.05;
+        group.add(light);
+      });
+    });
+
+    return group;
+  }, []);
+
+  // ------------------------------------------------
+  //  SEMAFORI
+  // ------------------------------------------------
+  const createTrafficLights = useCallback(() => {
+    const group = new THREE.Group();
+    trafficLightMaterialsRef.current = [];
+
+    const poleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x111111,
+      metalness: 0.9,
+      roughness: 0.35,
+    });
+
+    const boxMaterial = new THREE.MeshStandardMaterial({
+      color: 0x151515,
+      metalness: 0.7,
+      roughness: 0.4,
+    });
+
+    const createOne = (x: number, z: number, facing: 'north' | 'south') => {
+      const poleGeo = new THREE.CylinderGeometry(0.09, 0.09, 4, 8);
+      const pole = new THREE.Mesh(poleGeo, poleMaterial);
+      pole.position.set(x, 2, z);
+      group.add(pole);
+
+      const boxGeo = new THREE.BoxGeometry(0.6, 1.6, 0.35);
+      const box = new THREE.Mesh(boxGeo, boxMaterial);
+      box.position.set(x, 3.3, z + (facing === 'north' ? 0.3 : -0.3));
+      box.rotation.y = facing === 'north' ? 0 : Math.PI;
+      group.add(box);
+
+      const createLightMat = (color: number) =>
+        new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 0.2,
+          metalness: 0.5,
+          roughness: 0.3,
+        });
+
+      const redMat = createLightMat(0xff3333);
+      const yellowMat = createLightMat(0xfff066);
+      const greenMat = createLightMat(0x55ff88);
+
+      const circleGeo = new THREE.SphereGeometry(0.12, 16, 16);
+
+      const red = new THREE.Mesh(circleGeo, redMat);
+      const yellow = new THREE.Mesh(circleGeo, yellowMat);
+      const green = new THREE.Mesh(circleGeo, greenMat);
+
+      const dz = facing === 'north' ? 0.18 : -0.18;
+
+      red.position.set(x, 3.7, z + dz);
+      yellow.position.set(x, 3.3, z + dz);
+      green.position.set(x, 2.9, z + dz);
+
+      group.add(red, yellow, green);
+
+      trafficLightMaterialsRef.current.push({
+        red: redMat,
+        yellow: yellowMat,
+        green: greenMat,
+      });
+    };
+
+    [-2, 2].forEach((x) => {
+      createOne(x, -6, 'north');
+      createOne(x, -6, 'south');
+      createOne(x, -20, 'north');
+      createOne(x, -20, 'south');
+    });
+
+    return group;
+  }, []);
+
+
+  // ------------------------------------------------
+  //  PORTAL
+  // ------------------------------------------------
   const createPortal = useCallback(() => {
     const group = new THREE.Group();
 
-    // Portal frame (square rising from ground)
-    const frameThickness = 0.15;
+    const frameThickness = 0.18;
     const frameSize = 4;
+
+    group.userData.baseFrameSize = frameSize;
+
     const frameMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x0066cc,
-      emissive: 0x0044aa,
-      emissiveIntensity: 2,
-      metalness: 0.9,
-      roughness: 0.1,
+      color: 0x0aa7ff,
+      emissive: 0x0088ff,
+      emissiveIntensity: 2.2,
+      metalness: 0.95,
+      roughness: 0.12,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.2,
     });
 
-    // Top bar
     const topBar = new THREE.Mesh(
       new THREE.BoxGeometry(frameSize, frameThickness, frameThickness),
-      frameMaterial
+      frameMaterial,
     );
     topBar.position.y = frameSize / 2;
-    topBar.name = 'frameTop';
     group.add(topBar);
 
-    // Bottom bar
     const bottomBar = new THREE.Mesh(
       new THREE.BoxGeometry(frameSize, frameThickness, frameThickness),
-      frameMaterial
+      frameMaterial,
     );
     bottomBar.position.y = -frameSize / 2;
-    bottomBar.name = 'frameBottom';
     group.add(bottomBar);
 
-    // Left bar
     const leftBar = new THREE.Mesh(
       new THREE.BoxGeometry(frameThickness, frameSize, frameThickness),
-      frameMaterial
+      frameMaterial,
     );
     leftBar.position.x = -frameSize / 2;
-    leftBar.name = 'frameLeft';
     group.add(leftBar);
 
-    // Right bar
     const rightBar = new THREE.Mesh(
       new THREE.BoxGeometry(frameThickness, frameSize, frameThickness),
-      frameMaterial
+      frameMaterial,
     );
     rightBar.position.x = frameSize / 2;
-    rightBar.name = 'frameRight';
     group.add(rightBar);
 
-    // Energy field plane with animated shader
-    const portalPlaneGeometry = new THREE.PlaneGeometry(frameSize - 0.3, frameSize - 0.3, 64, 64);
+    const portalPlaneGeometry = new THREE.PlaneGeometry(
+      frameSize - 0.3,
+      frameSize - 0.3,
+      64,
+      64,
+    );
     const portalPlaneMaterial = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
@@ -173,10 +560,8 @@ const createFoodDeliveryModel = useCallback(() => {
       },
       vertexShader: `
         varying vec2 vUv;
-        varying vec3 vPosition;
         void main() {
           vUv = uv;
-          vPosition = position;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -187,43 +572,33 @@ const createFoodDeliveryModel = useCallback(() => {
         uniform vec3 color2;
         uniform vec3 color3;
         varying vec2 vUv;
-        varying vec3 vPosition;
-        
+
         float noise(vec2 p) {
-          return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453);
         }
-        
+
         void main() {
           vec2 center = vUv - 0.5;
           float dist = length(center);
           float angle = atan(center.y, center.x);
-          
-          // Swirling pattern
+
           float swirl = sin(angle * 8.0 + time * 2.0 - dist * 15.0) * 0.5 + 0.5;
-          
-          // Radial waves
           float wave1 = sin(dist * 25.0 - time * 4.0) * 0.5 + 0.5;
           float wave2 = sin(dist * 15.0 - time * 3.0 + 1.5) * 0.5 + 0.5;
-          
-          // Combine patterns
           float pattern = swirl * 0.4 + wave1 * 0.3 + wave2 * 0.3;
-          
-          // Edge glow
+
           float edge = smoothstep(0.5, 0.2, dist);
           float rim = smoothstep(0.4, 0.5, dist) * (1.0 - smoothstep(0.5, 0.6, dist));
-          
-          // Color mixing
+
           vec3 color = mix(color1, color2, pattern);
           color = mix(color, color3, rim * 2.0);
-          
-          // Alpha with intensity control
+
           float alpha = edge * (0.5 + pattern * 0.3) * intensity;
           alpha += rim * 0.8 * intensity;
-          
-          // Add sparkle
-          float sparkle = noise(vUv * 50.0 + time) * 0.15 * intensity;
+
+          float sparkle = noise(vUv * 50.0 + time) * 0.12 * intensity;
           alpha += sparkle * edge;
-          
+
           gl_FragColor = vec4(color, alpha * 0.85);
         }
       `,
@@ -232,725 +607,481 @@ const createFoodDeliveryModel = useCallback(() => {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
+
     const portalPlane = new THREE.Mesh(portalPlaneGeometry, portalPlaneMaterial);
     portalPlane.name = 'portalPlane';
     group.add(portalPlane);
 
-    // Central core glow
     const coreGeometry = new THREE.SphereGeometry(0.25, 32, 32);
     const coreMaterial = new THREE.MeshBasicMaterial({
       color: 0x00ffff,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.85,
     });
     const core = new THREE.Mesh(coreGeometry, coreMaterial);
     core.name = 'core';
     group.add(core);
 
-    // Portal light
-    const portalLight = new THREE.PointLight(0x00d4ff, 8, 25);
-    portalLight.position.set(0, 0, 0);
+    const portalLight = new THREE.PointLight(0x00d4ff, 8, 20);
+    portalLight.position.set(0, 0, 2);
     portalLight.name = 'portalLight';
     group.add(portalLight);
 
-    // Initially hidden below ground
     group.position.y = -5;
     group.visible = false;
 
     return group;
   }, []);
 
-  // Create rain particles
-  const createRainParticles = useCallback(() => {
-    const count = 8000;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocities = new Float32Array(count);
+  const fitPortalToVehicle = useCallback(
+    (portal: THREE.Group, vehicle: THREE.Object3D) => {
+      const baseFrameSize = Number(portal.userData.baseFrameSize ?? 4);
+      const vSize = getObjectSize(vehicle);
 
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 80;
-      positions[i * 3 + 1] = Math.random() * 40;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
-      velocities[i] = 0.3 + Math.random() * 0.4;
-    }
+      const target = Math.max(vSize.y, vSize.x) * 0.92;
+      const s = target / baseFrameSize;
 
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 1));
+      portal.scale.setScalar(Math.max(0.7, Math.min(3.4, s)));
+    },
+    [getObjectSize],
+  );
 
-    const material = new THREE.PointsMaterial({
-      color: 0x6688cc,
-      size: 0.08,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending,
-    });
-
-    return new THREE.Points(geometry, material);
-  }, []);
-
-  // Create steam particles for food
-  const createSteamParticles = useCallback(() => {
-    const count = 150;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const lifetimes = new Float32Array(count);
-    const speeds = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-      positions[i * 3] = (Math.random() - 0.5) * 0.8;
-      positions[i * 3 + 1] = Math.random() * 2;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 0.8;
-      lifetimes[i] = Math.random();
-      speeds[i] = 0.01 + Math.random() * 0.02;
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('lifetime', new THREE.BufferAttribute(lifetimes, 1));
-    geometry.setAttribute('speed', new THREE.BufferAttribute(speeds, 1));
-
-    const material = new THREE.PointsMaterial({
-      color: 0xffddaa,
-      size: 0.15,
-      transparent: true,
-      opacity: 0.4,
-      blending: THREE.AdditiveBlending,
-    });
-
-    return new THREE.Points(geometry, material);
-  }, []);
-
-  // Create portal orbiting particles
-  const createPortalParticles = useCallback(() => {
-    const count = 300;
-    const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const angles = new Float32Array(count);
-    const radii = new Float32Array(count);
-    const speeds = new Float32Array(count);
-    const offsets = new Float32Array(count);
-
-    for (let i = 0; i < count; i++) {
-      angles[i] = Math.random() * Math.PI * 2;
-      radii[i] = 2.2 + Math.random() * 0.6;
-      speeds[i] = 0.3 + Math.random() * 0.8;
-      offsets[i] = Math.random() * Math.PI * 2;
-      
-      positions[i * 3] = 0;
-      positions[i * 3 + 1] = radii[i] * Math.sin(angles[i]);
-      positions[i * 3 + 2] = radii[i] * Math.cos(angles[i]);
-    }
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('angle', new THREE.BufferAttribute(angles, 1));
-    geometry.setAttribute('radius', new THREE.BufferAttribute(radii, 1));
-    geometry.setAttribute('speed', new THREE.BufferAttribute(speeds, 1));
-    geometry.setAttribute('offset', new THREE.BufferAttribute(offsets, 1));
-
-    const material = new THREE.PointsMaterial({
-      color: 0x00ffff,
-      size: 0.12,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-    });
-
-    const particles = new THREE.Points(geometry, material);
-    particles.visible = false;
-    return particles;
-  }, []);
-
-  // Create reflective ground
-  const createGround = useCallback(() => {
-    const geometry = new THREE.PlaneGeometry(120, 120, 100, 100);
-    const material = new THREE.MeshPhysicalMaterial({
-      color: 0x080812,
-      metalness: 0.9,
-      roughness: 0.15,
-      envMapIntensity: 1.5,
-    });
-    const ground = new THREE.Mesh(geometry, material);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = 0;
-    ground.receiveShadow = true;
-    return ground;
-  }, []);
-
-  // Create road with glowing lane markers
-  const createRoad = useCallback(() => {
-    const group = new THREE.Group();
-    
-    const roadGeometry = new THREE.PlaneGeometry(10, 40);
-    const roadMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x12121a,
-      metalness: 0.7,
-      roughness: 0.25,
-    });
-    const road = new THREE.Mesh(roadGeometry, roadMaterial);
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(-12, 0.01, 0);
-    road.receiveShadow = true;
-    group.add(road);
-
-    // Glowing lane stripes
-    const stripeMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x00d4ff,
-      emissive: 0x00d4ff,
-      emissiveIntensity: 1.5,
-    });
-
-    for (let i = -7; i <= 7; i++) {
-      const stripe = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.25, 2.5),
-        stripeMaterial
-      );
-      stripe.rotation.x = -Math.PI / 2;
-      stripe.position.set(-12, 0.02, i * 2.8);
-      group.add(stripe);
-    }
-
-    // Edge lines
-    [-4.8, 4.8].forEach(x => {
-      const edgeLine = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.1, 40),
-        stripeMaterial
-      );
-      edgeLine.rotation.x = -Math.PI / 2;
-      edgeLine.position.set(-12 + x, 0.02, 0);
-      group.add(edgeLine);
-    });
-
-    return group;
-  }, []);
-
-  // Create city buildings
-  const createBuildings = useCallback((side: 'left' | 'right') => {
-    const group = new THREE.Group();
-    const xBase = side === 'left' ? -22 : 22;
-    const buildingColor = side === 'left' ? 0x0a1428 : 0x281a0a;
-    const accentColor = side === 'left' ? 0x00d4ff : 0xff6b35;
-
-    const buildingCount = 12;
-    
-    for (let i = 0; i < buildingCount; i++) {
-      const height = 8 + Math.random() * 20;
-      const width = 3 + Math.random() * 4;
-      const depth = 3 + Math.random() * 4;
-      
-      const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
-      const buildingMaterial = new THREE.MeshPhysicalMaterial({
-        color: buildingColor,
-        metalness: 0.6,
-        roughness: 0.4,
-      });
-      const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-      
-      const xOffset = (Math.random() - 0.5) * 10;
-      const zPos = -18 + i * 3 + (Math.random() - 0.5) * 2;
-      
-      building.position.set(xBase + xOffset, height / 2, zPos);
-      building.castShadow = true;
-      building.receiveShadow = true;
-      group.add(building);
-
-      // Window lights
-      const windowRows = Math.floor(height / 2.5);
-      for (let j = 0; j < windowRows; j++) {
-        if (Math.random() > 0.4) {
-          const windowGeometry = new THREE.PlaneGeometry(0.6, 1);
-          const windowMaterial = new THREE.MeshPhysicalMaterial({
-            color: accentColor,
-            emissive: accentColor,
-            emissiveIntensity: 0.6 + Math.random() * 0.4,
-            transparent: true,
-            opacity: 0.8,
-          });
-          const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
-          const windowX = building.position.x + (side === 'left' ? width / 2 + 0.01 : -width / 2 - 0.01);
-          windowMesh.position.set(
-            windowX,
-            2 + j * 2.5,
-            building.position.z + (Math.random() - 0.5) * (depth * 0.6)
-          );
-          windowMesh.rotation.y = side === 'left' ? 0 : Math.PI;
-          group.add(windowMesh);
-        }
-      }
-    }
-
-    return group;
-  }, []);
-
-  // Main scene setup and animation
+  // ------------------------------------------------
+  //  GLAVNI EFFECT (scene setup)
+  // ------------------------------------------------
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Scene
+    const container = containerRef.current;
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x050510, 0.012);
+    scene.background = new THREE.Color(0x02030a);
     sceneRef.current = scene;
 
-    // Camera - STATIC position
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 6, 24);
-    camera.lookAt(0, 1, 0);
+    scene.add(createSkyDome());
+    scene.add(createGround());
+    scene.add(createRoad());
+    scene.add(createCity());
+    scene.add(createStreetLamps());
+    scene.add(createTrafficLights());
+
+
+    const camera = new THREE.PerspectiveCamera(52, width / height, 0.1, 2000);
+    camera.position.set(0, 6.6, 22.0);
+    camera.lookAt(0, 2.2, -6.0);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: 'high-performance',
-    });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    containerRef.current.appendChild(renderer.domElement);
+    renderer.toneMappingExposure = 1.08;
+
+    container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Post-processing
     const composer = new EffectComposer(renderer);
-    const renderPass = new RenderPass(scene, camera);
-    composer.addPass(renderPass);
+    composerRef.current = composer;
+
+    composer.addPass(new RenderPass(scene, camera));
 
     const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.8,
-      0.3,
-      0.75
+      new THREE.Vector2(width, height),
+      1.15,
+      0.42,
+      0.8,
     );
+    bloomPass.threshold = 0.12;
+    bloomPass.strength = 1.15;
+    bloomPass.radius = 0.52;
     composer.addPass(bloomPass);
-    composerRef.current = composer;
     bloomPassRef.current = bloomPass;
 
-    // Ambient lighting
-    const ambientLight = new THREE.AmbientLight(0x0a1020, 0.4);
-    scene.add(ambientLight);
-	scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.28));
 
-const dir = new THREE.DirectionalLight(0xffffff, 2);
-dir.position.set(5, 10, 5);
-scene.add(dir);
+    const moon = new THREE.DirectionalLight(0x99cfff, 1.55);
+    moon.position.set(-12, 18, 12);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(2048, 2048);
+    scene.add(moon);
 
+    const centerNeon = new THREE.PointLight(0x00eaff, 2.0, 48);
+    centerNeon.position.set(0, 4.5, -6);
+    scene.add(centerNeon);
 
-    // Directional light
-    const directionalLight = new THREE.DirectionalLight(0x4488ff, 0.4);
-    directionalLight.position.set(15, 30, 15);
-    directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 100;
-    directionalLight.shadow.camera.left = -40;
-    directionalLight.shadow.camera.right = 40;
-    directionalLight.shadow.camera.top = 40;
-    directionalLight.shadow.camera.bottom = -40;
-    scene.add(directionalLight);
+    createTaxiModel().then((taxi) => {
+      taxi.position.set(TAXI_X, taxi.position.y, VEHICLES_Z);
+      taxi.rotation.set(0, TAXI_YAW, 0);
 
-    // Build scene
-    const ground = createGround();
-    scene.add(ground);
+      taxiBaseY.current = taxi.position.y;
+      scene.add(taxi);
+      taxiGroupRef.current = taxi;
+    });
 
-    const road = createRoad();
-    scene.add(road);
+    createFoodDeliveryModel().then((food) => {
+      food.position.set(MOTOR_X, food.position.y, VEHICLES_Z);
+      food.rotation.set(0, MOTOR_YAW, 0);
 
-    const leftBuildings = createBuildings('left');
-    scene.add(leftBuildings);
+      foodBaseY.current = food.position.y;
+      scene.add(food);
+      foodGroupRef.current = food;
+    });
 
-    const rightBuildings = createBuildings('right');
-    scene.add(rightBuildings);
-
-    // Taxi
-// Taxi
-createTaxiModel().then((taxi) => {
-
-  // TAKSI JE IZNAD PORTALA KOJI ĆE BITI ISPOD NJEGA
-  taxi.position.set(-8, 1.1, 0);
-
-  // lagano pod kutem prema kameri (LIJEVA STRANA)
-  taxi.rotation.set(0, Math.PI * 0.28, 0);
-
-  // realna veličina
-  taxi.scale.setScalar(2.1);
-
-  taxiBaseY.current = taxi.position.y;
-
-  scene.add(taxi);
-  taxiGroupRef.current = taxi;
-});
-
-
-
-    // Food delivery
-// Food delivery MOTOR
-createFoodDeliveryModel().then((food) => {
-
-  // MOTOR IZNAD PORTALA
-  food.position.set(8, 1.05, 0);
-
-  // MOTOR RAVNO — NEMA ROTACIJE
-  food.rotation.set(0, 0, 0);
-
-  // malo manji od auta — ali vidljiv
-  food.scale.setScalar(1.65);
-
-  foodBaseY.current = food.position.y;
-
-  scene.add(food);
-  foodGroupRef.current = food;
-});
-
-
-    // Portal (hidden initially)
     const portal = createPortal();
-    portal.position.set(0, 0, 0);
+    portal.position.set(0, 1.6, 0);
     scene.add(portal);
     portalRef.current = portal;
 
-    // Rain
-    const rain = createRainParticles();
-    scene.add(rain);
-    rainParticlesRef.current = rain;
+    setIntroComplete(true);
+    onIntroComplete();
 
-    // Steam (positioned at food delivery)
-    const steam = createSteamParticles();
-    steam.position.set(8, 1.5, -0.6);
-    scene.add(steam);
-    steamParticlesRef.current = steam;
-
-    // Portal particles
-    const portalParticles = createPortalParticles();
-    scene.add(portalParticles);
-    portalParticlesRef.current = portalParticles;
-
-
-
-    // CINEMATIC INTRO ANIMATION (no camera movement - just fade in)
-// nema timelinea – intro je odmah gotov
-setIntroComplete(true);
-setSceneState('idle');
-onIntroComplete();
-
-
-    // Animation loop
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
+
       timeRef.current += 0.016;
-      const time = timeRef.current;
+      const t = timeRef.current;
 
-      // Update portal shader if visible
-      if (portal.visible) {
-        const portalPlane = portal.children.find(c => c.name === 'portalPlane');
-        if (portalPlane && (portalPlane as THREE.Mesh).material) {
-          const material = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
-          if (material.uniforms) {
-            material.uniforms.time.value = time;
-          }
+      const warpV = warpVehicleRef.current;
+
+      if (taxiGroupRef.current && taxiGroupRef.current !== warpV) {
+        taxiGroupRef.current.position.y =
+          taxiBaseY.current + Math.sin(t * 0.8) * 0.02;
+      }
+      if (foodGroupRef.current && foodGroupRef.current !== warpV) {
+        foodGroupRef.current.position.y =
+          foodBaseY.current + Math.sin(t * 0.8 + 1) * 0.02;
+      }
+
+      if (portalRef.current && portalRef.current.visible) {
+        const portalPlane = portalRef.current.children.find(
+          (c) => c.name === 'portalPlane',
+        ) as THREE.Mesh | undefined;
+
+        if (portalPlane) {
+          const mat = portalPlane.material as THREE.ShaderMaterial;
+          if (mat.uniforms?.time) mat.uniforms.time.value = t;
         }
 
-        // Portal glow pulse
-        const portalLight = portal.children.find(c => c.name === 'portalLight') as THREE.PointLight;
-        if (portalLight) {
-          portalLight.intensity = 8 + Math.sin(time * 2) * 2;
-        }
+        const core = portalRef.current.children.find(
+          (c) => c.name === 'core',
+        ) as THREE.Mesh | undefined;
 
-        // Core pulse
-        const core = portal.children.find(c => c.name === 'core') as THREE.Mesh;
         if (core) {
-          const scale = 1 + Math.sin(time * 3) * 0.2;
-          core.scale.setScalar(scale);
+          const s = 1 + Math.sin(t * 3) * 0.2;
+          core.scale.setScalar(s);
+        }
+
+        const portalLight = portalRef.current.children.find(
+          (c) => c.name === 'portalLight',
+        ) as THREE.PointLight | undefined;
+
+        if (portalLight) {
+          portalLight.intensity = 8 + Math.sin(t * 2) * 2;
         }
       }
 
-// Taxi idle animation
-if (taxiGroupRef.current) {
-  taxiGroupRef.current.position.y =
-    taxiBaseY.current + Math.sin(time * 1.5) * 0.05;
+      const cycle = 9;
+      trafficLightMaterialsRef.current.forEach((mats, index) => {
+        const localT = (t + index * 1.1) % cycle;
 
-  taxiGroupRef.current.children.forEach(child => {
-    if (child.name && child.name.startsWith('wheel-')) {
-      child.rotation.x += 0.01;
-    }
-  });
-}
+        const off = 0.15;
+        let redI = off;
+        let yellowI = off;
+        let greenI = off;
 
-// Food delivery idle animation
-if (foodGroupRef.current) {
-  foodGroupRef.current.position.y =
-    foodBaseY.current + Math.sin(time * 1.5 + 1) * 0.04;
+        if (localT < 3) redI = 2.2;
+        else if (localT < 6) greenI = 2.2;
+        else yellowI = 2.0;
 
-  foodGroupRef.current.children.forEach(child => {
-    if (child.name && child.name.startsWith('wheel-')) {
-      child.rotation.x += 0.008;
-    }
-  });
-}
-
-
-      // Rain animation
-      if (rain) {
-        const positions = rain.geometry.attributes.position.array as Float32Array;
-        const velocities = rain.geometry.attributes.velocity.array as Float32Array;
-        
-        for (let i = 0; i < positions.length / 3; i++) {
-          positions[i * 3 + 1] -= velocities[i];
-          positions[i * 3] += Math.sin(time + i) * 0.001;
-          
-          if (positions[i * 3 + 1] < 0) {
-            positions[i * 3 + 1] = 40;
-            positions[i * 3] = (Math.random() - 0.5) * 80;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 80;
-          }
-        }
-        rain.geometry.attributes.position.needsUpdate = true;
-      }
-
-      // Steam animation
-      if (steamParticlesRef.current) {
-        const positions = steamParticlesRef.current.geometry.attributes.position.array as Float32Array;
-        const lifetimes = steamParticlesRef.current.geometry.attributes.lifetime.array as Float32Array;
-        const speeds = steamParticlesRef.current.geometry.attributes.speed.array as Float32Array;
-
-        for (let i = 0; i < positions.length / 3; i++) {
-          lifetimes[i] += 0.008;
-          
-          if (lifetimes[i] > 1) {
-            lifetimes[i] = 0;
-            positions[i * 3] = (Math.random() - 0.5) * 0.8;
-            positions[i * 3 + 1] = 0;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 0.8;
-          }
-          
-          positions[i * 3 + 1] += speeds[i];
-          positions[i * 3] += Math.sin(time * 2 + i) * 0.003;
-          positions[i * 3 + 2] += Math.cos(time * 2 + i) * 0.003;
-        }
-        steamParticlesRef.current.geometry.attributes.position.needsUpdate = true;
-      }
-
-      // Portal particles orbiting (if visible)
-      if (portalParticlesRef.current && portalParticlesRef.current.visible) {
-        const positions = portalParticlesRef.current.geometry.attributes.position.array as Float32Array;
-        const angles = portalParticlesRef.current.geometry.attributes.angle.array as Float32Array;
-        const radii = portalParticlesRef.current.geometry.attributes.radius.array as Float32Array;
-        const speeds = portalParticlesRef.current.geometry.attributes.speed.array as Float32Array;
-        const offsets = portalParticlesRef.current.geometry.attributes.offset.array as Float32Array;
-
-        for (let i = 0; i < positions.length / 3; i++) {
-          angles[i] += speeds[i] * 0.015;
-          const wobble = Math.sin(time + offsets[i]) * 0.2;
-          positions[i * 3] = wobble;
-          positions[i * 3 + 1] = radii[i] * Math.sin(angles[i]);
-          positions[i * 3 + 2] = radii[i] * Math.cos(angles[i]);
-        }
-        portalParticlesRef.current.geometry.attributes.position.needsUpdate = true;
-      }
+        mats.red.emissiveIntensity = redI;
+        mats.yellow.emissiveIntensity = yellowI;
+        mats.green.emissiveIntensity = greenI;
+      });
 
       composer.render();
     };
 
     animate();
 
-    // Resize handler
     const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
+      if (
+        !cameraRef.current ||
+        !rendererRef.current ||
+        !composerRef.current ||
+        !containerRef.current
+      )
+        return;
+
+      const w = containerRef.current.clientWidth || window.innerWidth;
+      const h = containerRef.current.clientHeight || window.innerHeight;
+
+      cameraRef.current.aspect = w / h;
+      cameraRef.current.updateProjectionMatrix();
+      rendererRef.current.setSize(w, h);
+      composerRef.current.setSize(w, h);
     };
 
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (animationIdRef.current) {
-        cancelAnimationFrame(animationIdRef.current);
+
+      if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
+
+      if (composerRef.current) {
+        // @ts-expect-error ovisi o three verziji
+        if (composerRef.current?.dispose) composerRef.current.dispose();
       }
-      
-      if (containerRef.current && renderer.domElement.parentElement === containerRef.current) {
-        containerRef.current.removeChild(renderer.domElement);
+
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        if (rendererRef.current.domElement && containerRef.current) {
+          try {
+            containerRef.current.removeChild(rendererRef.current.domElement);
+          } catch {
+            // ignore
+          }
+        }
       }
-      renderer.dispose();
+
+      sceneRef.current = null;
+      cameraRef.current = null;
+      rendererRef.current = null;
+      composerRef.current = null;
+      bloomPassRef.current = null;
+      taxiGroupRef.current = null;
+      foodGroupRef.current = null;
+      portalRef.current = null;
+      warpVehicleRef.current = null;
+      isWarpAnimatingRef.current = false;
     };
   }, [
-    createTaxiModel,
-    createFoodDeliveryModel,
-    createPortal,
-    createRainParticles,
-    createSteamParticles,
-    createPortalParticles,
+    createSkyDome,
     createGround,
     createRoad,
-    createBuildings,
+    createCity,
+    createStreetLamps,
+    createTrafficLights,
+    createPortal,
+    createTaxiModel,
+    createFoodDeliveryModel,
     onIntroComplete,
   ]);
 
-  // PORTAL WARP ANIMATION - portal rises from ground and sucks vehicle
-  const triggerWarpAnimation = useCallback((selectedWorld: 'taxi' | 'food') => {
-    if (!portalRef.current || !cameraRef.current || !bloomPassRef.current || isWarpAnimating) return;
+  // ------------------------------------------------
+  //  PORTAL WARP
+  // ------------------------------------------------
+  const triggerWarpAnimation = useCallback(
+    (selectedWorld: 'taxi' | 'food') => {
+      if (
+        !portalRef.current ||
+        !cameraRef.current ||
+        !bloomPassRef.current ||
+        isWarpAnimatingRef.current
+      )
+        return;
 
-    setIsWarpAnimating(true);
-    setSceneState(selectedWorld === 'taxi' ? 'warp-taxi' : 'warp-food');
-    onWorldSelect(selectedWorld);
+      const vehicle =
+        selectedWorld === 'taxi'
+          ? taxiGroupRef.current
+          : foodGroupRef.current;
+      if (!vehicle) return;
 
-    const portal = portalRef.current;
-    const camera = cameraRef.current;
-    const bloom = bloomPassRef.current;
-    const vehicle = selectedWorld === 'taxi' ? taxiGroupRef.current : foodGroupRef.current;
-    const vehicleX = selectedWorld === 'taxi' ? -8 : 8;
+      isWarpAnimatingRef.current = true;
+      onWorldSelect(selectedWorld);
 
-    if (!vehicle) return;
+      warpVehicleRef.current = vehicle;
 
-    // Get portal shader for intensity control
-    const portalPlane = portal.children.find(c => c.name === 'portalPlane');
-    const portalLight = portal.children.find(c => c.name === 'portalLight') as THREE.PointLight;
+      const portal = portalRef.current;
+      const camera = cameraRef.current;
+      const bloom = bloomPassRef.current;
 
-    // Show portal and particles
-    portal.visible = true;
-    if (portalParticlesRef.current) {
-      portalParticlesRef.current.visible = true;
-    }
+      fitPortalToVehicle(portal, vehicle);
 
-    // Position portal at vehicle location, below ground
-    portal.position.set(vehicleX, -4, 0);
-    portal.rotation.x = -Math.PI / 2; // Lay flat on ground
-    if (portalParticlesRef.current) {
-      portalParticlesRef.current.position.set(vehicleX, 0, 0);
-    }
+      const vPos = vehicle.position.clone();
+      const vehicleX = vPos.x;
+      const portalZ = vPos.z + 3.1;
 
-    const warpTimeline = gsap.timeline({
-      onComplete: () => {
-        // Navigate to page
-        setTimeout(() => {
-          navigate(selectedWorld === 'taxi' ? '/taxi' : '/food');
-        }, 200);
-      },
-    });
+      portal.visible = true;
+      portal.position.set(vehicleX, 1.7, portalZ);
 
-    // Phase 1: Camera zooms to vehicle
-    warpTimeline
-      .to(camera.position, {
-        x: vehicleX * 0.3,
-        y: 4,
-        z: 12,
-        duration: 0.8,
-        ease: 'power2.out',
-        onUpdate: () => {
-          camera.lookAt(vehicleX, 0, 0);
-        },
-      })
-      // Phase 2: Portal rises from ground
-      .to(portal.position, {
-        y: 0.1,
-        duration: 1,
-        ease: 'power2.out',
-      }, 0.3)
-      .to(bloom, {
-        strength: 2.5,
-        duration: 0.8,
-      }, 0.3);
+      const portalPlane = portal.children.find(
+        (c) => c.name === 'portalPlane',
+      ) as THREE.Mesh | undefined;
+      const portalLight = portal.children.find(
+        (c) => c.name === 'portalLight',
+      ) as THREE.PointLight | undefined;
 
-    // Intensify portal glow during rise
-    if (portalLight) {
-      warpTimeline.to(portalLight, {
-        intensity: 20,
-        duration: 1,
-      }, 0.3);
-    }
+      let flashEl: HTMLDivElement | null = null;
 
-    if (portalPlane && (portalPlane as THREE.Mesh).material) {
-      const mat = (portalPlane as THREE.Mesh).material as THREE.ShaderMaterial;
-      if (mat.uniforms) {
-        warpTimeline.to(mat.uniforms.intensity, {
-          value: 2,
-          duration: 0.8,
-        }, 0.3);
-      }
-    }
-
-    // Phase 3: Vehicle gets sucked into portal
-    warpTimeline
-      .to(vehicle.position, {
-        y: -3,
-        duration: 1.2,
-        ease: 'power2.in',
-      }, 1.2)
-      .to(vehicle.scale, {
-        x: 0.3,
-        y: 0.3,
-        z: 0.3,
-        duration: 1.2,
-        ease: 'power2.in',
-      }, 1.2)
-      .to(vehicle.rotation, {
-        y: Math.PI * 2,
-        duration: 1.2,
-        ease: 'power2.in',
-      }, 1.2);
-
-    // Phase 4: Portal collapses and screen flashes
-    warpTimeline
-      .to(portal.scale, {
-        x: 0.1,
-        y: 0.1,
-        z: 0.1,
-        duration: 0.4,
-        ease: 'power3.in',
-      }, 2.3)
-      .to(bloom, {
-        strength: 5,
-        duration: 0.3,
-      }, 2.3);
-
-    if (portalLight) {
-      warpTimeline.to(portalLight, {
-        intensity: 50,
-        duration: 0.3,
-      }, 2.3);
-    }
-
-    // Flash white at end
-    if (containerRef.current) {
-      const flash = document.createElement('div');
-      flash.style.cssText = `
-        position: fixed;
-        inset: 0;
-        background: white;
-        opacity: 0;
-        pointer-events: none;
-        z-index: 100;
-      `;
-      containerRef.current.appendChild(flash);
-      
-      gsap.to(flash, {
-        opacity: 1,
-        duration: 0.3,
-        delay: 2.4,
+      const tl = gsap.timeline({
         onComplete: () => {
-          // Keep white during navigation
+          setTimeout(() => {
+            navigate(selectedWorld === 'taxi' ? '/taxi' : '/food');
+          }, 180);
         },
       });
-    }
-  }, [isWarpAnimating, navigate, onWorldSelect]);
 
-  // Click handler
-  const handleClick = useCallback((world: 'taxi' | 'food') => {
-    if (!introComplete || isWarpAnimating) return;
-    triggerWarpAnimation(world);
-  }, [introComplete, isWarpAnimating, triggerWarpAnimation]);
+      tl.to(
+        camera.position,
+        {
+          x: vehicleX * 0.22,
+          y: 4.9,
+          z: 13.8,
+          duration: 0.85,
+          ease: 'power2.out',
+          onUpdate: () => {
+            camera.lookAt(vehicleX, 1.8, portalZ);
+          },
+        },
+        0,
+      );
+
+      tl.to(
+        portal.position,
+        {
+          y: 2.05,
+          duration: 0.85,
+          ease: 'power2.out',
+        },
+        0.15,
+      );
+
+      tl.to(
+        bloom,
+        {
+          strength: 2.4,
+          duration: 0.75,
+        },
+        0.15,
+      );
+
+      if (portalLight) {
+        tl.to(
+          portalLight,
+          {
+            intensity: 22,
+            duration: 0.75,
+          },
+          0.15,
+        );
+      }
+
+      if (portalPlane) {
+        const mat = portalPlane.material as THREE.ShaderMaterial;
+        if (mat.uniforms?.intensity) {
+          tl.to(
+            mat.uniforms.intensity,
+            {
+              value: 2.2,
+              duration: 0.75,
+            },
+            0.15,
+          );
+        }
+      }
+
+      tl.to(
+        vehicle.position,
+        {
+          x: vehicleX,
+          y: 0.74,
+          z: portalZ + 0.05,
+          duration: 0.95,
+          ease: 'power2.inOut',
+        },
+        1.05,
+      );
+      tl.to(
+        vehicle.scale,
+        {
+          x: 0.25,
+          y: 0.25,
+          z: 0.25,
+          duration: 0.95,
+          ease: 'power2.in',
+        },
+        1.05,
+      );
+      tl.to(
+        vehicle.rotation,
+        {
+          y: vehicle.rotation.y + Math.PI * 2,
+          duration: 0.95,
+          ease: 'power2.in',
+        },
+        1.05,
+      );
+
+      tl.add(() => {
+        vehicle.visible = false;
+      }, 2.05);
+
+      tl.to(
+        bloom,
+        {
+          strength: 4.8,
+          duration: 0.25,
+        },
+        2.15,
+      );
+
+      if (portalLight) {
+        tl.to(
+          portalLight,
+          {
+            intensity: 55,
+            duration: 0.25,
+          },
+          2.15,
+        );
+      }
+
+      if (containerRef.current) {
+        flashEl = document.createElement('div');
+        flashEl.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: white;
+          opacity: 0;
+          pointer-events: none;
+          z-index: 100;
+        `;
+        containerRef.current.appendChild(flashEl);
+
+        gsap.to(flashEl, { opacity: 1, duration: 0.2, delay: 2.18 });
+        gsap.to(flashEl, {
+          opacity: 0,
+          duration: 0.25,
+          delay: 2.45,
+          onComplete: () => {
+            flashEl?.remove();
+            flashEl = null;
+          },
+        });
+      }
+    },
+    [fitPortalToVehicle, navigate, onWorldSelect],
+  );
+
+  const handleClick = useCallback(
+    (world: 'taxi' | 'food') => {
+      if (!introComplete || isWarpAnimatingRef.current) return;
+      triggerWarpAnimation(world);
+    },
+    [introComplete, triggerWarpAnimation],
+  );
 
   return (
-    <div className="fixed inset-0 overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden bg-black">
       <div ref={containerRef} className="absolute inset-0" />
-      
-      {/* Left click zone - TAXI */}
+
+      {/* Klik zone */}
       <div
         className="absolute left-0 top-0 w-1/2 h-full cursor-pointer z-10"
         onClick={() => handleClick('taxi')}
@@ -959,8 +1090,6 @@ if (foodGroupRef.current) {
           handleClick('taxi');
         }}
       />
-      
-      {/* Right click zone - FOOD */}
       <div
         className="absolute right-0 top-0 w-1/2 h-full cursor-pointer z-10"
         onClick={() => handleClick('food')}
